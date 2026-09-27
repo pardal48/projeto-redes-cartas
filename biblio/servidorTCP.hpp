@@ -1,0 +1,43 @@
+#ifndef SERVIDORTCP_HPP
+#define SERVIDORTCP_HPP
+
+#include <iostream>
+#include <string>
+#include<sys/socket.h>
+#include<sys/types.h>
+#include<netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+class servidorTCP {
+
+private:
+
+    int servidorSocket;
+
+public:
+
+    servidorTCP(int port);
+
+    ~servidorTCP();
+
+    void escutar();
+
+    int aceitar();
+
+    void enviar(int clientID,const std::string& mensagem);
+
+    std::string receber(int clientID);
+};
+
+
+
+
+
+
+
+
+
+
+
+#endif

@@ -1,10 +1,15 @@
+
+CXXFLAGS = -Wall -Wextra -std=c++17 -Ibiblio
+
+SERVIDOR = controle/servidor.cpp controle/servidorTCP.cpp
+CLIENTE = controle/cliente.cpp controle/clienteTCP.cpp
 all: servidor cliente
 
-servidor: servidor.cpp
-	g++ -o servidor servidor.cpp
+servidor: 
+	g++ $(CXXFLAGS) $(SERVIDOR) -o bin/servidor
 
-cliente: cliente.cpp
-	g++ -o cliente cliente.cpp
+cliente:
+	g++ $(CXXFLAGS) $(CLIENTE) -o bin/cliente
 
 clean:
 	rm -f servidor cliente
