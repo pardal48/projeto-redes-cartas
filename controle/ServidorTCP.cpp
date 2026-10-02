@@ -6,9 +6,9 @@
 #include<netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include "servidorTCP.hpp"
+#include "ServidorTCP.hpp"
 
-servidorTCP:: servidorTCP(int port){
+ServidorTCP::ServidorTCP(int port, const std::string& nome) : porta(port), nomeServidor(nome) {
     servidorSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (servidorSocket == -1) {
         perror("erro ao criar socket");
@@ -39,19 +39,19 @@ servidorTCP:: servidorTCP(int port){
     }
 }
 
-servidorTCP::~servidorTCP(){
+ServidorTCP::~ServidorTCP(){
     if (servidorSocket != -1) {
         close(servidorSocket);
     }
 }
 
-void servidorTCP::escutar() {
+void ServidorTCP::escutar() {
     if (listen(servidorSocket, SOMAXCONN) == -1) {
         std::cerr << "erro listen" << std::endl;
     }
 }
 
-int servidorTCP::aceitar(){
+int ServidorTCP::aceitar(){
     sockaddr_in cliente{};
     socklen_t tamanho = sizeof(cliente);
 
@@ -63,11 +63,11 @@ int servidorTCP::aceitar(){
     return clientID;
 }
 
-void servidorTCP::enviar(int clientID, const std::string& mensagem){
+void ServidorTCP::enviar(int clientID, const std::string& mensagem){
     send(clientID, mensagem.data(), mensagem.size(), 0);
 }
 //em receber podemos por outros tipos pra serem recebidos, isso é só um place holder
-std::string servidorTCP::receber(int clienteID){
+std::string ServidorTCP::receber(int clienteID){
     char buffer[1024];
 
     int bytes = recv(clienteID,buffer,sizeof(buffer),0);
@@ -80,7 +80,7 @@ std::string servidorTCP::receber(int clienteID){
 
 }
 
-int servidorTCP::getporta() const {
+int ServidorTCP::getporta() const {
     return porta;
 }
 

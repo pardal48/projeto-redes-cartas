@@ -1,9 +1,9 @@
 
 CXXFLAGS = -Wall -Wextra -std=c++17 -Ibiblio
 
-SERVIDOR = controle/servidor.cpp controle/servidorTCP.cpp
-CLIENTE = controle/cliente.cpp controle/clienteTCP.cpp
-JOGO = jogo/jogador.cpp jogo/Carta.cpp
+SERVIDOR = controle/Servidor.cpp controle/ServidorTCP.cpp
+CLIENTE = controle/Cliente.cpp controle/ClienteTCP.cpp
+JOGO = jogo/Jogador.cpp jogo/Carta.cpp
 INTERACAO= interacao/Interface.cpp
 all: servidor cliente jogo
 

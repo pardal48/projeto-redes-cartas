@@ -6,8 +6,8 @@
 #include<netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include "servidorTCP.hpp"
-#include "conexao.hpp"
+#include "ServidorTCP.hpp"
+#include "Conexao.hpp"
 
 int main() {
 
@@ -17,7 +17,7 @@ int main() {
     std::cin >> nomeServidor;
     
     
-    servidorTCP servidor(5000); // Porta 5000, se zero, o SO escolhe uma porta disponível
+    ServidorTCP servidor(5000, nomeServidor); // Porta 5000, se zero, o SO escolhe uma porta disponível
 
     //ServidorInfo infoServidor(nomeServidor,servidor.getporta());//armazena as informações do servidor, como nome e porta
     std::cout << "[SERVIDOR] A iniciar na porta " << servidor.getporta() << "...\n";

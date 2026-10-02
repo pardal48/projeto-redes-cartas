@@ -9,13 +9,13 @@
 #include<netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-class clienteTCP{
+class ClienteTCP{
 private:
     /* data */
     int clienteID;//id do socket
 public:
-    clienteTCP(/* args */);//cria socket
-    ~clienteTCP();
+    ClienteTCP(/* args */);//cria socket
+    ~ClienteTCP();
 ;
 
 void conectar(const std::string& ip, int port);
