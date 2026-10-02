@@ -10,49 +10,16 @@
 #include "conexao.hpp"
 
 int main() {
-    /*char buffer[1024];
-    int servidorSocket = socket(AF_INET, SOCK_STREAM, 0);//IPv4, TCP
-    if (servidorSocket == -1) {
-        std::cerr << "Erro ao criar o socket do servidor" << std::endl;
-        return 1;
-    }
-    std::cout << "Socket do servidor criado" << std::endl;
-    
-    sockaddr_in endereco; // Endereço IP do servidor
-    endereco.sin_family = AF_INET;
-    endereco.sin_port = htons(8080); // Porta do servidor
-    endereco.sin_addr.s_addr = INADDR_ANY; // Aceitar conexões de qualquer
-    
-    if(bind(servidorSocket,(sockaddr*)&endereco, sizeof(endereco)) == -1) {
-        std::cerr << "Erro no bind cliente" << std::endl;
-        return 1;
-    }
-    std::cout << "socket na porta" << std::endl;
-    if(listen(servidorSocket,10)==1){
-        std::cerr << "erro listen" << std::endl;
-    }
-    //aceita um cliente
-    int cliente = accept(servidorSocket,nullptr,nullptr);
-    std:: cout << "cliente conectado" <<std:: endl;
 
-    int bytes = recv(cliente,buffer,sizeof(buffer),0);
-    buffer[bytes]='\0';
-
-    std::cout << "Mensagem: " << buffer << std::endl;
-    close(cliente);
-    close(servidorSocket);
-
-
-    return 0;*/
 
     std:: string nomeServidor;
     std::cout << "Digite o nome do servidor: ";
     std::cin >> nomeServidor;
     
     
-    servidorTCP servidor(0);
+    servidorTCP servidor(5000); // Porta 5000, se zero, o SO escolhe uma porta disponível
 
-    ServidorInfo infoServidor(nomeServidor,servidor.getporta());//armazena as informações do servidor, como nome e porta
+    //ServidorInfo infoServidor(nomeServidor,servidor.getporta());//armazena as informações do servidor, como nome e porta
     std::cout << "[SERVIDOR] A iniciar na porta " << servidor.getporta() << "...\n";
     servidor.escutar();
         

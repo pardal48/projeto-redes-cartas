@@ -16,7 +16,7 @@ class Carta{
 
         public:
         Carta(int id, std::string nome, std::string descricao);
-
-        virtual void aplicarEfeito(Jogador& jogador)=0; // Carta é classe abstrata, um pouco diferente do java
+        ~Carta();
+        //virtual void aplicarEfeito(Jogador& jogador)=0; // Carta é classe abstrata, um pouco diferente do java
         void setId(int id);
 };
