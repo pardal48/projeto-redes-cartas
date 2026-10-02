@@ -39,6 +39,7 @@ void clienteTCP::conectar(const std::string& ip,int port){
 void clienteTCP::enviar(const std::string & mensagem){
 
     send(clienteID,mensagem.data(),mensagem.size(),0);
+    
 
 
 }

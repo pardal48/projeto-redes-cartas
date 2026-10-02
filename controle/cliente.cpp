@@ -7,42 +7,23 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include"clienteTCP.hpp"
+#include"Interface.hpp"
+#include"conexao.hpp"
 int main() {
-   /* std::string mensagem ="ola server";
-    int clienteSocket = socket(AF_INET, SOCK_STREAM, 0);//IPv4, TCP
-    if (clienteSocket == -1) {
-        std::cerr << "Erro ao criar o socket do cliente" << std::endl;
-        return 1;
-    }
-    std::cout << "Socket do cliente criado " << std::endl;
-
-    sockaddr_in enderecoServidor; // Endereço IP do servidor
-    enderecoServidor.sin_family = AF_INET;
-    enderecoServidor.sin_port = htons(8080); // Porta do servidor
-    inet_pton(AF_INET,"127.0.0.1",&enderecoServidor.sin_addr);
-
-    if(connect(clienteSocket,(sockaddr*)&enderecoServidor,sizeof(enderecoServidor))==-1){
-        std::cerr << "Erro ao criar o socket do cliente" << std::endl;
-        return 1;
-    }
-
-    std::cout << "Conectado ao servidor!"<<std::endl;
-
-    send(clienteSocket,mensagem.c_str(),mensagem.size(),0);
-
-    close(clienteSocket);
-    
-
-    
-    
-    return 0;
-*/
+   
     clienteTCP cliente;
-
-    std::cout << "[CLIENTE] A tentar conectar ao servidor...\n";
-    cliente.conectar("127.0.0.1", 8080);
-        
+    Jogador jogador;
+    Interface interface;
     
+    if (!interface.TelaInicial()) {
+        return 0;
+    }
+    std::cout << "[CLIENTE] A tentar conectar ao servidor...\n";
+    cliente.conectar("127.0.0.1", 5000);
+        
+    //comece a implementar a partir daqui, pode começar pelo lobby ou podemos pular essa parte e ir direto pro jogo, 
+    //mas o lobby é importante pra ver se o servidor está cheio ou não, e também pra ver se tem o mínimo de 2 jogadores
+
 
     std::cout << "[CLIENTE] Conectado!\n";
 

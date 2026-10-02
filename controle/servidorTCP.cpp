@@ -9,7 +9,6 @@
 #include "servidorTCP.hpp"
 
 servidorTCP:: servidorTCP(int port){
-
     servidorSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (servidorSocket == -1) {
         perror("erro ao criar socket");
@@ -19,7 +18,7 @@ servidorTCP:: servidorTCP(int port){
 
     sockaddr_in servidor{};
     servidor.sin_family = AF_INET;//ipv4
-    servidor.sin_port = htons(port);//port
+    servidor.sin_port = htons(port);//porta
     servidor.sin_addr.s_addr = INADDR_ANY;//qualquer um conecta
 
     if (bind(servidorSocket, (sockaddr*)&servidor, sizeof(servidor)) == -1) {
@@ -28,7 +27,16 @@ servidorTCP:: servidorTCP(int port){
         servidorSocket = -1;
     }
 
+    sockaddr_in enderecoReal{};
+    socklen_t tamanho = sizeof(enderecoReal);
+    if (getsockname(servidorSocket, (sockaddr*)&enderecoReal, &tamanho) == -1) {
+        perror("Erro ao obter a porta real");
+        close(servidorSocket);
+        servidorSocket = -1;
+    } else {
+        porta = ntohs(enderecoReal.sin_port);//pega a porta gerada pelo SO, caso a porta passada seja 0
 
+    }
 }
 
 servidorTCP::~servidorTCP(){
@@ -71,3 +79,8 @@ std::string servidorTCP::receber(int clienteID){
     return std::string(buffer,bytes);
 
 }
+
+int servidorTCP::getporta() const {
+    return porta;
+}
+
