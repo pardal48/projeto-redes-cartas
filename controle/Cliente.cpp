@@ -1,17 +1,16 @@
 #include <iostream>
 #include <string>
-#include <vector>
 #include<sys/socket.h>
 #include<sys/types.h>
 #include<netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include"clienteTCP.hpp"
+#include"ClienteTCP.hpp"
 #include"Interface.hpp"
-#include"conexao.hpp"
+#include"Conexao.hpp"
 int main() {
    
-    clienteTCP cliente;
+    ClienteTCP cliente;
     Jogador jogador;
     Interface interface;
     

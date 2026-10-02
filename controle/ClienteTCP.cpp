@@ -1,4 +1,4 @@
-#include"clienteTCP.hpp"
+#include"ClienteTCP.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-clienteTCP::clienteTCP(){
+ClienteTCP::ClienteTCP(){
     clienteID = socket(AF_INET,SOCK_STREAM,0);
     if (clienteID == -1) {
         perror("Erro ao criar socket do cliente");
@@ -15,13 +15,13 @@ clienteTCP::clienteTCP(){
 
 }
 
-clienteTCP::~clienteTCP(){
+ClienteTCP::~ClienteTCP(){
 
         close(clienteID);
 }
  
 
-void clienteTCP::conectar(const std::string& ip,int port){
+void ClienteTCP::conectar(const std::string& ip,int port){
 
     sockaddr_in servidor{};
 
@@ -36,7 +36,7 @@ void clienteTCP::conectar(const std::string& ip,int port){
 
 }
 
-void clienteTCP::enviar(const std::string & mensagem){
+void ClienteTCP::enviar(const std::string & mensagem){
 
     send(clienteID,mensagem.data(),mensagem.size(),0);
     
@@ -44,7 +44,7 @@ void clienteTCP::enviar(const std::string & mensagem){
 
 }
 
-std:: string clienteTCP :: receber(){
+std:: string ClienteTCP :: receber(){
      char buffer[1024];
 
     int bytes = recv(clienteID,buffer,sizeof(buffer),0);
@@ -60,7 +60,7 @@ std:: string clienteTCP :: receber(){
 
 }
 
-void clienteTCP::fechar() {
+void ClienteTCP::fechar() {
 
     if (clienteID!= -1) {
 
