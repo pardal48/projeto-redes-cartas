@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include"clienteTCP.hpp"
+#include"Interface.hpp"
+#include"conexao.hpp"
 int main() {
    /* std::string mensagem ="ola server";
     int clienteSocket = socket(AF_INET, SOCK_STREAM, 0);//IPv4, TCP
@@ -38,7 +40,12 @@ int main() {
     return 0;
 */
     clienteTCP cliente;
-
+    Jogador jogador;
+    Interface interface;
+    
+    if (!interface.TelaInicial()) {
+        return 0;
+    }
     std::cout << "[CLIENTE] A tentar conectar ao servidor...\n";
     cliente.conectar("127.0.0.1", 8080);
         

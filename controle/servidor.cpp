@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include "servidorTCP.hpp"
+#include "conexao.hpp"
+
 int main() {
     /*char buffer[1024];
     int servidorSocket = socket(AF_INET, SOCK_STREAM, 0);//IPv4, TCP
@@ -43,9 +45,15 @@ int main() {
 
     return 0;*/
 
-    servidorTCP servidor(8080);
+    std:: string nomeServidor;
+    std::cout << "Digite o nome do servidor: ";
+    std::cin >> nomeServidor;
+    
+    
+    servidorTCP servidor(0);
 
-    std::cout << "[SERVIDOR] A iniciar na porta 8080...\n";
+    ServidorInfo infoServidor(nomeServidor,servidor.getporta());//armazena as informações do servidor, como nome e porta
+    std::cout << "[SERVIDOR] A iniciar na porta " << servidor.getporta() << "...\n";
     servidor.escutar();
         
     std::cout << "[SERVIDOR] A aguardar conexao de cliente...\n";

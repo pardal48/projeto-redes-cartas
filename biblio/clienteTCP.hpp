@@ -1,7 +1,6 @@
 
 
-#ifndef CLIENTETCP_HPP
-#define CLIENTETCP_HPP
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -29,4 +28,3 @@ void fechar();
 
 };
 
-#endif
