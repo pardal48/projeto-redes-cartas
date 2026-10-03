@@ -215,33 +215,41 @@ void ServidorTCP::processarLinha(ClienteConectado& client, const std::string& li
     }
 #endif
  
-    if (jogoIniciado) {
-        processarComandoJogo(client, linha);
-        cv.notify_all();  // acorda quem espera resposta na janela de reação
-        return;
-    }
- 
-    if (linha.rfind("NOME ", 0) == 0) {//se a linha de comando recebida começa com "NOME ", significa que o cliente está tentando definir um nome para o jogador
-        if (!client.jogador.getNome().empty()) { enviarTudo(client.socket, "ERRO JA_TEM_NOME\n"); return; }
-        std::string nome = linha.substr(5);//extrai o nome do jogador a partir da linha de comando recebida
-        if (!nomeValido(nome)) { enviarTudo(client.socket, "ERRO NOME_INVALIDO\n"); return; }
+    if (linha.rfind("NOME ", 0) == 0) {
+        if (!client.jogador.getNome().empty()) { 
+            enviarTudo(client.socket, "ERRO JA_TEM_NOME\n"); 
+            return; 
+        }
+        
+        // Se a linha for exatamente "NOME ", o substr(5) retorna "" (string vazia) com segurança
+        std::string nome = linha.substr(5);
+        
+        // Valida no lado do servidor
+        if (!nomeValido(nome)) { 
+            enviarTudo(client.socket, "ERRO NOME_INVALIDO\n"); 
+            return; 
+        }
+        
+        // Tudo certo: define o nome e AVISA o cliente
         client.jogador.setNome(nome);
+        enviarTudo(client.socket, "OK NOME_ACEITO\n");
+
     } else if (linha == "PRONTO" && !client.jogador.getNome().empty()) {
-        //se o jogador já escolheu um nome, ele pode marcar como pronto para iniciar o jogo
         client.jogador.setPronto(true);
     } else if (linha == "ESPERA") {
-        //se o jogador decide não estar pronto, ele pode voltar ao estado de espera
         client.jogador.setPronto(false);
     } else {
-        return;  // comando desconhecido
+        // Fallback fundamental: Se vier lixo ("NOME" sem espaço, comando nulo, etc)
+        // O servidor devolve erro para não deixar o cliente esperando para sempre.
+        enviarTudo(client.socket, "ERRO COMANDO_DESCONHECIDO\n");
+        return;  
     }
-    //envia a todos os clientes conectados o estado atual do lobby
+
     broadcast(estadoComoTexto());
  
-    // checagem + mudança de estado atômicas: INICIAR nunca sai duas vezes
     if (todosProntos()) {
         jogoIniciado = true;
-        std::cout << "Todos prontos: iniciando partida com " << clientes.size() << " jogadores\n";
+        std::cout << "Todos prontos: iniciando partida...\n";
         broadcast("INICIAR\n");
     }
 }
@@ -256,7 +264,19 @@ void ServidorTCP::broadcast(const std::string& msg) {//manda informação para t
     for (auto& client : clientes) enviarTudo((*client).socket, msg);
 }
 bool ServidorTCP::nomeValido(const std::string& nome) const {
-    // se quiserem por alguma condição, pesquisem ae
+    // 1. Rejeita se for vazio (o cliente enviou só "NOME ")
+    // 2. Rejeita se tiver mais de 12 caracteres
+    if (nome.empty() || nome.length() > 12) {
+        return false;
+    }
+
+    // 3. Garante que todos os caracteres são letras ou números
+    for (char c : nome) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+
     return true;
 }
 
