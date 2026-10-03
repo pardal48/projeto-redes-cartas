@@ -17,3 +17,8 @@ void Jogador::setNome(const std::string& nome) { this->nome = nome; }
 
 void Jogador::setPronto(bool pronto) { this->pronto = pronto; }
 bool Jogador::getPronto() const { return pronto; }
+
+bool Jogador::estaVivo() const { return vivo; }
+void Jogador::eliminar() { vivo = false; }
+
+std::vector<std::unique_ptr<Carta>>& Jogador ::getMao(){ return cartas; }

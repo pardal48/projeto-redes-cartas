@@ -34,6 +34,10 @@ public:
     bool iniciar();   // socket, bind, listen (com verificação de erro)
     void executar();  // loop de accept; retorna quando parar() for chamado
     void parar();     // seguro para chamar em signal handler
+    void broadcast(const std::string& msg);
+
+    void verificarFimDeJogo();// verifica se acabou o jogo
+    size_t jogadoresVivosCount() const;// conta quantidade de jogadores vivos
 
 private:
 
@@ -45,7 +49,7 @@ private:
     // [mtx]
     void processarLinha(ClienteConectado& c, const std::string& linha);
     void processarComandoJogo(ClienteConectado& c, const std::string& linha);
-    void broadcast(const std::string& msg);
+    //void broadcast(const std::string& msg);
     bool nomeValido(const std::string& nome) const;
     bool todosProntos() const;
     size_t jogadoresNoLobby() const;  // só quem já escolheu nome

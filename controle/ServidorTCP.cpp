@@ -260,6 +260,42 @@ void ServidorTCP::processarComandoJogo(ClienteConectado&, const std::string&) {
     // TODO: máquina de estados do jogo
 }
 
+
+size_t ServidorTCP::jogadoresVivosCount() const {
+    size_t contador = 0;
+    for (const auto& client : clientes) {
+        if (client->jogador.estaVivo()) {
+            contador++;
+        }
+    }
+    return contador;
+}
+
+void ServidorTCP::verificarFimDeJogo() {
+    //esse mutex depende, se grantirmos que já vai estar lockado chegando aqui não precisa
+    //std::lock_guard<std::mutex> lock(mtx);
+    
+    // Se sobrar apenas 1 jogador vivo com a partida em andamento
+    if (jogoIniciado && jogadoresVivosCount() <= 1) {
+        std::shared_ptr<ClienteConectado> vencedor = nullptr;
+        for (const auto& client : clientes) {
+            if ((*client).jogador.estaVivo()) {
+                vencedor = client;
+                break;
+            }
+        }
+
+        if (vencedor) {
+            std::cout << "Partida encerrada! Vencedor: " << (*vencedor).jogador.getNome() << "\n";
+            broadcast("FIM_DE_JOGO " + std::to_string((*vencedor).jogador.getId()) + "\n");
+        } else {
+            broadcast("FIM_DE_JOGO EMPATE\n");
+        }
+        
+        jogoIniciado = false; // Retorna para o lobby
+    }
+}
+
 void ServidorTCP::broadcast(const std::string& msg) {//manda informação para todos os clientes conectados, como o estado do lobby ou mensagens de jogo
     for (auto& client : clientes) enviarTudo((*client).socket, msg);
 }
