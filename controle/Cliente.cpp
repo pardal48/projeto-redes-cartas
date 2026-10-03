@@ -1,41 +1,145 @@
-#include <iostream>
+#include "ClienteTCP.hpp"
+#include "Interface.hpp"
+ 
+#include <atomic>
+#include <cstdlib>
 #include <string>
-#include<sys/socket.h>
-#include<sys/types.h>
-#include<netinet/in.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include"ClienteTCP.hpp"
-#include"Interface.hpp"
-#include"Conexao.hpp"
+ 
+// ---- MÚLTIPLOS SERVIDORES (desativado) ----
+// Para reativar: troque '#if 0' por '#if 1' (aqui, em ClienteTCP.hpp, clienteTCP.cpp
+// e Interface.hpp), reative o comando INFO em servidorTCP.cpp e use o bloco do main.
+// Quando reativar, o menu abaixo pode ser movido para a Interface (mostrar_servidores /
+// escolher_servidor), no mesmo estilo dos outros métodos.
+#if 0
+#include "Conexao.hpp"  // ServidorInfo (ajuste o nome do arquivo)
+#include <iostream>
+#include <thread>
+#include <vector>
+ 
+// Uma thread por servidor: o menu não espera 2 s × N servidores.
+// Cada thread mexe em um ServidorInfo e em um índice de 'respondeu' só seu
+// (vector<char> e não vector<bool>, para não haver corrida entre índices vizinhos).
+static void sondarServidores(std::vector<ServidorInfo>& servidores, std::vector<char>& respondeu) {
+    respondeu.assign(servidores.size(), 0);
+    std::vector<std::thread> sondas;
+    for (size_t i = 0; i < servidores.size(); ++i) {
+        sondas.emplace_back([&servidores, &respondeu, i] {
+            respondeu[i] = consultarServidor(servidores[i]) ? 1 : 0;  // preenche o ServidorInfo
+        });
+    }
+    for (auto& t : sondas) t.join();
+}
+ 
+// Devolve o índice escolhido, ou -1 para sair.
+static int escolherServidor(std::vector<ServidorInfo>& servidores) {
+    while (true) {
+        std::vector<char> respondeu;
+        sondarServidores(servidores, respondeu);
+ 
+        std::cout << "\n=== Servidores ===\n";
+        for (size_t i = 0; i < servidores.size(); ++i) {
+            const auto& s = servidores[i];
+            std::cout << "  " << (i + 1) << ") " << s.nome << " (" << s.endereco << ":" << s.porta << ")  ";
+            if (!respondeu[i])         std::cout << "[offline]\n";
+            else if (s.estahCheio())   std::cout << s.jogadores << "/" << s.capacidade << " [cheio]\n";
+            else                       std::cout << s.jogadores << "/" << s.capacidade << "\n";
+        }
+        std::cout << "Numero do servidor, 'r' para atualizar ou '0' para sair: " << std::flush;
+ 
+        std::string entrada;
+        if (!std::getline(std::cin, entrada)) return -1;
+        if (entrada == "r" || entrada == "R") continue;
+        if (entrada == "0") return -1;
+ 
+        int n = std::atoi(entrada.c_str());
+        if (n < 1 || static_cast<size_t>(n) > servidores.size()) {
+            std::cout << "Opcao invalida.\n";
+            continue;
+        }
+        size_t i = static_cast<size_t>(n - 1);
+        if (!respondeu[i])               { std::cout << "Servidor offline.\n"; continue; }
+        if (servidores[i].estahCheio())  { std::cout << "Servidor cheio.\n";   continue; }
+        return n - 1;
+    }
+}
+#endif
+
 int main() {
    
-    ClienteTCP cliente;
+    
     Jogador jogador;
     Interface interface;
-    
-    if (!interface.TelaInicial()) {
-        return 0;
+    //se implementar a parte de múltiplos servidores, podemos mudar a parte de escolher servidor para usar a função escolherServidor() que está comentada no main.cpp, mas por enquanto vamos deixar assim mesmo, com o servidor hardcoded para localhost:5000
+    //para escolher um servidor da lista de servidores conectados
+    std::string ip = "localhost";
+    int porta = 5000;
+     if (!interface.TelaInicial()) {return 0;}
+        // ---- MÚLTIPLOS SERVIDORES (desativado) ----
+    // Substitui a conexão direta abaixo: monta a lista, mostra o menu e usa o escolhido.
+#if 0
+    std::vector<ServidorInfo> servidores;
+    servidores.emplace_back("Sala Local", porta);
+    servidores.back().endereco = ip;
+ 
+    int escolhido = escolherServidor(servidores);
+    if (escolhido < 0) return 0;
+    const ServidorInfo& alvo = servidores[static_cast<size_t>(escolhido)];
+    ip = alvo.endereco;
+    porta = alvo.porta;
+#endif
+    ClienteTCP cliente;
+   
+    std::atomic<bool> noLobby{false};
+    // Definido antes de conectar(): a thread de recepção lê este callback.
+    // Ele roda na thread de recepção; a Interface cuida do mutex da tela.
+    //magia negra aqui, depois descubro
+    cliente.aoAtualizar = [&] {
+        if (noLobby) interface.mostrar_lobby(cliente.lobby(), cliente.meuId());
+    };
+ 
+    if (!cliente.conectar(ip, porta)) {
+        interface.mostrar_erro("Nao foi possivel conectar ao servidor.");
+        return 1;
     }
-    std::cout << "[CLIENTE] A tentar conectar ao servidor...\n";
-    cliente.conectar("127.0.0.1", 5000);
-        
-    //comece a implementar a partir daqui, pode começar pelo lobby ou podemos pular essa parte e ir direto pro jogo, 
-    //mas o lobby é importante pra ver se o servidor está cheio ou não, e também pra ver se tem o mínimo de 2 jogadores
-
-
-    std::cout << "[CLIENTE] Conectado!\n";
-
-    // 1. Envia mensagem inicial
-    std::string mensagem = "Ola Servidor! Esta e uma mensagem de teste.";
-    cliente.enviar(mensagem);
-    std::cout << "[CLIENTE] Mensagem enviada: " << mensagem << "\n";
-
-    // 2. Aguarda a resposta do servidor
-    std::string resposta = cliente.receber();
-    std::cout << "[CLIENTE] Resposta do servidor: " << resposta << "\n";
-
+ 
+    //escolha do nome
+    std::string nome;
+    bool nomeOk = false;
+    while (cliente.conectado()) {
+        if (!interface.pedir_nome(nome)) return 0;  // fim da entrada
+ 
+        cliente.enviar("NOME " + nome);
+        if (cliente.esperarNome()) { nomeOk = true; break; }
+        if (cliente.conectado()) interface.mostrar_nome_invalido();
+    }
+    if (!nomeOk) {
+        interface.mostrar_erro("Conexao encerrada (lobby cheio, partida em andamento ou servidor fora).");
+        return 1;
+    }
+ 
+    // lobby
+    noLobby = true;
+    interface.mostrar_lobby(cliente.lobby(), cliente.meuId());
+ 
+    while (cliente.conectado() && !cliente.iniciou()) {
+        // timeout de 200 ms: reavalia conectado()/iniciou() mesmo sem o usuário digitar
+        Interface::ComandoLobby cmd = interface.ler_comando_lobby(200);
+        if (cmd == Interface::ComandoLobby::AlternarPronto)
+            cliente.enviar(cliente.estouPronto() ? "ESPERA" : "PRONTO");
+        else if (cmd == Interface::ComandoLobby::Sair)
+            break;
+    }
+ 
+    noLobby = false;
+    if (cliente.iniciou()) {
+        interface.mostrar_partida_iniciando();
+        // TODO: entrar na tela do jogo
+    } else if (!cliente.conectado()) {
+        interface.mostrar_conexao_perdida();
+    }
+ 
     cliente.fechar();
     return 0;
+
 
 }

@@ -8,7 +8,7 @@ INTERACAO= interacao/Interface.cpp
 all: servidor cliente jogo
 
 servidor: 
-	g++ $(CXXFLAGS) $(SERVIDOR) -o bin/servidor
+	g++ $(CXXFLAGS) $(SERVIDOR) $(JOGO) -o bin/servidor
 
 cliente:
 	g++ $(CXXFLAGS) $(CLIENTE) $(JOGO) $(INTERACAO) -o bin/cliente

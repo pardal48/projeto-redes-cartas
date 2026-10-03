@@ -6,8 +6,16 @@
 #include<netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <signal.h>
 #include "ServidorTCP.hpp"
 #include "Conexao.hpp"
+static ServidorTCP* g_servidor = nullptr;// ponteiro global para o servidor, usado no signal handler
+static void tratarSinal(int) {// função de tratamento de sinal para Ctrl+C
+    //quando o sinal é recebido, chama o método parar() do servidor para encerrar a execução do loop de accept()
+    //isso evita que o programa seja encerrado abruptamente e permite que o servidor feche corretamente os sockets e libere recursos
+    if (g_servidor) g_servidor->parar();//se o ponteiro global do servidor não for nulo, isto é, se o servidor estiver em execução, 
+    //chama o método parar() para encerrar a execução do loop de accept()
+}
 
 int main() {
 
@@ -19,29 +27,22 @@ int main() {
     
     ServidorTCP servidor(5000, nomeServidor); // Porta 5000, se zero, o SO escolhe uma porta disponível
 
-    //ServidorInfo infoServidor(nomeServidor,servidor.getporta());//armazena as informações do servidor, como nome e porta
-    std::cout << "[SERVIDOR] A iniciar na porta " << servidor.getporta() << "...\n";
-    servidor.escutar();
-        
-    std::cout << "[SERVIDOR] A aguardar conexao de cliente...\n";
-    int clienteID = servidor.aceitar();
+    g_servidor = &servidor;
+ 
+    // sigaction sem SA_RESTART: o poll() é interrompido pelo Ctrl+C
+    // basicamente impede que o fechamento abrupto do terminal cause problemas no servidor, 
+    //permitindo que ele seja encerrado de forma controlada
+    // ia sugeriu usar isso então deixarei para evitar problemas, principalmente durante o desenvolvimento e testes do servidor
+    struct sigaction sa{};
+    sa.sa_handler = tratarSinal;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
 
-    if (clienteID== -1) {
-        return 1;
-    }
+    
 
-    std::cout << "[SERVIDOR] Cliente conectado com sucesso!\n";
-
-    // 1. Recebe mensagem do cliente
-    std::string mensagem_recebida = servidor.receber(clienteID);
-    std::cout << "[SERVIDOR] Mensagem do cliente: " << mensagem_recebida << "\n";
-
-    // 2. Envia resposta de volta
-    std::string resposta = "Ola Cliente! Mensagem recebida com sucesso.";
-    servidor.enviar(clienteID, resposta);
-    std::cout << "[SERVIDOR] Resposta enviada.\n";
-
-    // Termina a conexao com o cliente
-    close(clienteID);
+    servidor.executar();
     return 0;
 }
+
+    

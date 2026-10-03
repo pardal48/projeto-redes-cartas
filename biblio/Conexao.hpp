@@ -18,9 +18,9 @@ struct ServidorInfo {
         return jogadores >= capacidade;
     }
 
-    ServidorInfo(const std::string& nome, int porta)
+    /*ServidorInfo(const std::string& nome, int porta)
         : nome(nome), porta(porta), jogadores(0) {
         // Inicializa o endereço como "localhost" ou outro valor padrão
         endereco = "localhost";
-    }
+    }*/
 };
