@@ -13,7 +13,10 @@ enum class TipoCarta {
     Desarme,
     Ataque,
     Pular,
-    
+    Nao,
+    Embaralhar,
+    Futuro,
+    Favor,
     // Cartas Sem Efeito (Gatos)
     GatoMelancia,
     GatoTaco,

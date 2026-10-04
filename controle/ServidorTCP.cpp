@@ -15,7 +15,7 @@
 
 //envia a mensagem completa, mesmo que o send() não consiga enviar tudo de uma vez, 
 //ele vai continuar enviando até que toda a mensagem seja enviada
-static bool enviarTudo(int fd, const std::string& msg) {
+bool ServidorTCP :: enviarTudo(int fd, const std::string& msg) {
     size_t total = 0;
     while (total < msg.size()) {
         ssize_t n = send(fd, msg.data() + total, msg.size() - total, MSG_NOSIGNAL);
@@ -184,6 +184,7 @@ void ServidorTCP::removerCliente(const std::shared_ptr<ClienteConectado>& client
     broadcast(estadoComoTexto());//envia a todos os clientes conectados o estado atual do lobby, incluindo informações sobre os jogadores presentes e se o jogo já começou
     cv.notify_all();//notifica todas as threads que estão esperando por uma condição específica, permitindo que elas continuem a execução
 }
+
 void ServidorTCP::encerrar() {
     rodando = false;
     {

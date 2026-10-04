@@ -22,3 +22,16 @@ bool Jogador::estaVivo() const { return vivo; }
 void Jogador::eliminar() { vivo = false; }
 
 std::vector<std::unique_ptr<Carta>>& Jogador ::getMao(){ return cartas; }
+
+void Jogador::adicionarCartaMao(std::unique_ptr<Carta> carta) {
+    cartas.push_back(std::move(carta));
+}
+
+std::unique_ptr<Carta> Jogador::removerCartaMao(size_t indice) {
+    if (indice >= cartas.size()) return nullptr; // 1. Validação de segurança
+
+    auto carta = std::move(cartas[indice]);      // 2. Transferência de posse
+    cartas.erase(cartas.begin() + indice);           // 3. Limpeza do vetor
+
+    return carta;                             // 4. Retorno do ponteiro
+}

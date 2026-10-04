@@ -25,7 +25,7 @@ public:
 
     int aceitar();
 
-    void enviar(int clientID,const std::string& mensagem);
+    //void enviar(int clientID,const std::string& mensagem);
 
     std::string receber(int clientID);
     
@@ -38,7 +38,7 @@ public:
 
     void verificarFimDeJogo();// verifica se acabou o jogo
     size_t jogadoresVivosCount() const;// conta quantidade de jogadores vivos
-
+    static bool enviarTudo(int fd, const std::string& msg);
 private:
 
     void atenderCliente(std::shared_ptr<ClienteConectado> c);  // corpo de cada thread
@@ -71,7 +71,7 @@ private:
  
     std::vector<std::thread> threads;  // só a thread de accept mexe aqui
 
-
+    
     
 
        

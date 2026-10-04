@@ -6,7 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
-
+#include <unordered_set>
 // Forward declarations para evitar dependências circulares
 class Carta;
 struct ClienteConectado; 
@@ -15,9 +15,10 @@ class ServidorTCP;
 class Partida {
 private:
     // --- Estruturas de Cartas ---
-    std::vector<std::shared_ptr<Carta>> baralho;
-    std::vector<std::shared_ptr<Carta>> pilhaDescarte;
-
+    std::vector<std::unique_ptr<Carta>> baralho;
+    std::vector<std::unique_ptr<Carta>> pilhaDescarte;
+   
+    
     // --- Estruturas de Clientes (Jogadores) ---
     // Referência para a lista de clientes mantida pelo Servidor/Lobby
     std::vector<std::shared_ptr<ClienteConectado>>& jogadores;
@@ -33,18 +34,16 @@ private:
 
     // --- Sistema de Efeitos e Timer ("Não") ---
     bool aguardandoReacao{false};
-    std::vector<std::shared_ptr<Carta>> pilhaEfeitos; // Acumula os "Não" jogados em sequência[cite: 9]
+    std::vector<std::unique_ptr<Carta>> pilhaEfeitos;// Acumula os "Não" jogados em sequência[cite: 9]
 
-    // --- Concorrência ---
-    // Mutex para evitar que dois clientes modifiquem o estado do jogo ao mesmo tempo
-    mutable std::mutex mtxJogo;
+    std::unordered_set<int> pendentesRespostaNao; // IDs dos jogadores que faltam responder
 
     // --- Métodos Internos Auxiliares ---
     void distribuirCartas(ServidorTCP& servidor);
     void embaralharBaralho();
     void aplicarEfeitosPendentes(ServidorTCP& servidor);
     void removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor); // Trata mortes e desconexões
-
+    void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
 public:
     // Construtor
     explicit Partida(std::vector<std::shared_ptr<ClienteConectado>>& listaClientes);
