@@ -9,7 +9,7 @@
 #include <vector>
 #include <mutex>
 #include "Conexao.hpp"
-
+class Partida;
 class ServidorTCP {
 // Servidor com uma thread por cliente.
 // REGRA: todo acesso a clientes / jogoIniciado / (futuro) estado do jogo
@@ -40,7 +40,7 @@ public:
     size_t jogadoresVivosCount() const;// conta quantidade de jogadores vivos
     static bool enviarTudo(int fd, const std::string& msg);
 private:
-
+    std::unique_ptr<Partida> partidaAtual{nullptr}; // Guarda a partida em andamento
     void atenderCliente(std::shared_ptr<ClienteConectado> c);  // corpo de cada thread
     std::shared_ptr<ClienteConectado> registrar(int fd);       // trava mtx internamente
     void removerCliente(const std::shared_ptr<ClienteConectado>& c);

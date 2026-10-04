@@ -1,6 +1,7 @@
 
 #include "ServidorTCP.hpp"
- 
+#include "Partida.hpp"
+#include "Carta.hpp"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <poll.h>
@@ -215,6 +216,10 @@ void ServidorTCP::processarLinha(ClienteConectado& client, const std::string& li
         return;
     }
 #endif
+    if (jogoIniciado && partidaAtual) {// se o jogo tiver começado, partida lida com isso
+        partidaAtual->processarComando(client, linha, *this);
+        return;
+    }
  
     if (linha.rfind("NOME ", 0) == 0) {
         if (!client.jogador.getNome().empty()) { 
@@ -252,6 +257,8 @@ void ServidorTCP::processarLinha(ClienteConectado& client, const std::string& li
         jogoIniciado = true;
         std::cout << "Todos prontos: iniciando partida...\n";
         broadcast("INICIAR\n");
+        partidaAtual = std::make_unique<Partida>(clientes); 
+        partidaAtual->iniciar(*this);
     }
 }
 

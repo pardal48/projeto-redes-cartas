@@ -1,6 +1,6 @@
 #ifndef PARTIDA_HPP
 #define PARTIDA_HPP
-
+#include "Carta.hpp"
 #include <vector>
 #include <deque>
 #include <memory>
@@ -39,15 +39,15 @@ private:
     std::unordered_set<int> pendentesRespostaNao; // IDs dos jogadores que faltam responder
 
     // --- Métodos Internos Auxiliares ---
-    void distribuirCartas(ServidorTCP& servidor);
-    void embaralharBaralho();
+    //void distribuirCartas(ServidorTCP& servidor);
+    //void embaralharBaralho();
     void aplicarEfeitosPendentes(ServidorTCP& servidor);
     void removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor); // Trata mortes e desconexões
     void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
 public:
     // Construtor
     explicit Partida(std::vector<std::shared_ptr<ClienteConectado>>& listaClientes);
-    ~Partida() = default;
+    ~Partida();
 
     // --- Fluxo Principal ---
     void iniciar(ServidorTCP& servidor);

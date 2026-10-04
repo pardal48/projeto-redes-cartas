@@ -43,4 +43,6 @@ class Carta{
         std::string getNome() const ;
         std::string getDescricao() const;
         TipoCarta getTipo() const;
+        //construtor pras subclasses de carta
+        static std::unique_ptr<Carta> criar(int id, const std::string& nome, const std::string& desc, TipoCarta tipo);
 };

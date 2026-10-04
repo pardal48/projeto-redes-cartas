@@ -1,6 +1,6 @@
 
 #include "Carta.hpp"
-
+class ServidorTCP;
 class CartaNormal : public Carta {
 public:
     CartaNormal(int id, std::string nome, std::string descricao, TipoCarta tipo)

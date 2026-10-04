@@ -1,5 +1,5 @@
 
-CXXFLAGS = -Wall -Wextra -std=c++17 -Ibiblio
+CXXFLAGS = -Wall -Wextra -std=c++17 -Ibiblio -Ijogo
 
 SERVIDOR = controle/Servidor.cpp controle/ServidorTCP.cpp
 CLIENTE = controle/Cliente.cpp controle/ClienteTCP.cpp
@@ -8,7 +8,7 @@ INTERACAO= interacao/Interface.cpp
 all: servidor cliente jogo
 
 servidor: 
-	g++ $(CXXFLAGS) $(SERVIDOR) $(JOGO) -o bin/servidor
+	g++ $(CXXFLAGS) $(SERVIDOR) $(JOGO) controle/Partida.cpp -o bin/servidor
 
 cliente:
 	g++ $(CXXFLAGS) $(CLIENTE) $(JOGO) $(INTERACAO) -o bin/cliente
