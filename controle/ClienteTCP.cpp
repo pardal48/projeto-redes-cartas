@@ -242,44 +242,41 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
                 if (j->getId() == id) nomeAceito = true;  // o servidor só lista quem tem nome
             mudou = true;//indica que houve uma mudança no estado do lobby, para atualizar a interface do usuário
         } else if (linha == "INICIAR") {
+            
             comecou = true;  // o laço do lobby percebe em até 200 ms (sem redesenhar a lista)
+        }else if (linha.rfind("MESA_ESTADO ", 0) == 0) {
+            
+            estadoMesaAtual = linha.substr(12);
+            mesaAtualizada = true; // Avisa a thread principal que a mesa chegou
+            
+            mudou = true;
+        } else if (linha.rfind("TURNO", 0) == 0 || linha.rfind("JOGOU", 0) == 0 || linha.rfind("COMPROU", 0) == 0 || linha.rfind("EXPLOSAO", 0) == 0) {
+            // Imprime direto no terminal avisos importantes do servidor
+            std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
         }
     }
     cv.notify_all();//acorda quem está esperando a resposta do servidor (nome aceito ou não)
     if (mudou && aoAtualizar) aoAtualizar();  // fora do lock
 }
 
-
-/*
-void ClienteTCP::enviar(const std::string & mensagem){
-
-    send(clienteID,mensagem.data(),mensagem.size(),0);
-    
+std::string ClienteTCP::obterEstadoMesaLocal() {
+    std::lock_guard<std::mutex> lock(mtx);
+    return estadoMesaAtual;
 }
 
-std:: string ClienteTCP :: receber(){
-    char buffer[1024];
-    
-    int bytes = recv(clienteID,buffer,sizeof(buffer),0);
+void ClienteTCP::esperarMesa() {
+    std::unique_lock<std::mutex> lock(mtx);
+    // Espera até 3 segundos pela mesa. Se o tempo estourar, acorda sozinho.
+    bool chegou = cv.wait_for(lock, std::chrono::seconds(3), [this] { 
+        return mesaAtualizada || !ativo; 
+    });
 
-    if (bytes <= 0) {
-        return "";
-    }
-    return std::string(
-        buffer,
-        bytes
-    );
-
-}
-
-void ClienteTCP::fechar() {
-
-    if (clienteID!= -1) {
-
-        close(clienteID);
-
-        clienteID = -1;
+    if (chegou && ativo) {
+        mesaAtualizada = false;  // Consome o aviso
+    } else if (!chegou) {
+        std::cerr << "\n[Aviso] Demora na resposta do servidor. A mesa pode estar desatualizada.\n";
     }
 }
-*/
+
+
  

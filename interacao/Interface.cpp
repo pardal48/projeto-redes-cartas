@@ -126,3 +126,33 @@ void Interface::mostrar_erro(const std::string& mensagem) {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cerr << mensagem << "\n";
 }
+
+void Interface::mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte) {
+    std::lock_guard<std::mutex> lock(mtxTela);
+    std::cout << "\n================= MESA DE JOGO =================\n";
+    
+    std::string temp = "";
+    for (char c : estadoMesa) {
+        if (c == '|') {
+            std::cout << temp << "\n";
+            temp = "";
+        } else {
+            temp += c;
+        }
+    }
+    
+    if (mostrarDescarte) {
+        std::cout << "--- [VISUALIZANDO PILHA DE DESCARTE] ---\n" << temp << "\n";
+    }
+    
+    std::cout << "================================================\n";
+    std::cout << "Comandos: COMPRAR | JOGAR <num_carta> | DESCARTE | MESA (atualizar) | SAIR\n";
+    std::cout << "O que deseja fazer? > " << std::flush;
+}
+
+std::string Interface::ler_comando_jogo() {
+    std::string linha;
+    std::getline(std::cin, linha);
+    for(auto &c : linha) c = toupper(c); // Converte para maiúsculo
+    return linha;
+}

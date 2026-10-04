@@ -133,13 +133,34 @@ int main() {
     noLobby = false;
     if (cliente.iniciou()) {
         interface.mostrar_partida_iniciando();
-        // TODO: entrar na tela do jogo
+        
+        // --- LOOP PRINCIPAL DO JOGO ---
+        cliente.enviar("MESA");
+        cliente.esperarMesa(); // Aguarda a foto inicial da mesa
+        
+        while (cliente.conectado()) {
+            std::string estado = cliente.obterEstadoMesaLocal();
+            interface.mostrar_mesa(estado, false);
+            
+            std::string acao = interface.ler_comando_jogo();
+            
+            if (acao == "SAIR") {
+                break;
+            } else if (acao == "DESCARTE") {
+                // Mostra a mesa forçando a exibição do descarte (não interage com a rede)
+                interface.mostrar_mesa(estado, true);
+                continue; 
+            } else if (!acao.empty()) {
+                cliente.enviar(acao); // Envia o comando (ex: JOGAR 0)
+                
+                // Em vez de sleep, pede a mesa atualizada e aguarda de forma segura
+                cliente.enviar("MESA");
+                cliente.esperarMesa(); 
+            }
+        }
+        
     } else if (!cliente.conectado()) {
         interface.mostrar_conexao_perdida();
     }
- 
-    cliente.fechar();
-    return 0;
-
 
 }

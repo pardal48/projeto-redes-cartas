@@ -55,6 +55,12 @@ public:
     bool estouPronto() const;// true se o jogador marcou como pronto
     bool conectado() const { return ativo; }// true se o socket está aberto e a thread de recepção está rodando
     bool iniciou() const { return comecou; }// true se o servidor enviou a mensagem "INICIAR" (o jogo começou)
+
+   
+    std::string obterEstadoMesaLocal();
+    void esperarMesa();
+
+
  
 private:
     void receber();// thread de recepção: lê o socket e atualiza o estado do lobby
@@ -73,6 +79,9 @@ private:
  
     std::atomic<bool> ativo{false};// true se o socket está aberto e a thread de recepção está rodando
     std::atomic<bool> comecou{false};// true se o servidor enviou a mensagem "INICIAR" (o jogo começou)
+    std::string estadoMesaAtual;
+    bool mesaAtualizada = false;
+    
 /*
 void conectar(const std::string& ip, int port);
 

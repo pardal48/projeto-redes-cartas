@@ -45,6 +45,8 @@ public:
     void mostrar_partida_iniciando();
     void mostrar_conexao_perdida();
     void mostrar_erro(const std::string& mensagem);
+    void mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte = false);
+    std::string ler_comando_jogo();
  
     // ---- MÚLTIPLOS SERVIDORES (desativado) ----
 #if 0

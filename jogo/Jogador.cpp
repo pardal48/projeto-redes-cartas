@@ -21,7 +21,7 @@ bool Jogador::getPronto() const { return pronto; }
 bool Jogador::estaVivo() const { return vivo; }
 void Jogador::eliminar() { vivo = false; }
 
-std::vector<std::unique_ptr<Carta>>& Jogador ::getMao(){ return cartas; }
+const std::vector<std::unique_ptr<Carta>>& Jogador ::getMao()const{ return cartas; }
 
 void Jogador::adicionarCartaMao(std::unique_ptr<Carta> carta) {
     cartas.push_back(std::move(carta));

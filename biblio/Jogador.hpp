@@ -31,7 +31,7 @@ public:
 
     bool estaVivo() const;
     void eliminar();
-    std::vector<std::unique_ptr<Carta>>& getMao() ;
+    const std::vector<std::unique_ptr<Carta>>& getMao() const;
     void adicionarCartaMao(std::unique_ptr<Carta> carta);
     std::unique_ptr<Carta> removerCartaMao(size_t indice);
     size_t getTamanhoMao() const { return cartas.size(); }
