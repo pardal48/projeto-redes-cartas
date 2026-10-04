@@ -255,6 +255,12 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
         } else if (linha.rfind("JOGOU", 0) == 0 || linha.rfind("COMPROU", 0) == 0 || linha.rfind("EXPLOSAO", 0) == 0) {
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
+        }else if (linha.rfind("ERRO", 0) == 0) {
+            std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
+            // Se for um erro no meio do jogo, devolve o turno para tentar de novo
+            if (linha != "ERRO NOME_INVALIDO" && linha != "ERRO LOBBY_CHEIO") {
+                turnoAtual = id; 
+            }
         }
     }
     cv.notify_all();//acorda quem está esperando a resposta do servidor (nome aceito ou não)

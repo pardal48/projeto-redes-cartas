@@ -123,6 +123,7 @@ void ServidorTCP::executar() {
 //registra um novo cliente no lobby, atribuindo um ID único e adicionando-o à lista de clientes conectados.
 std::shared_ptr<ClienteConectado> ServidorTCP::registrar(int fd) {
     //trava o mutex para garantir que o acesso à lista de clientes seja seguro em relação a múltiplas threads
+    std::lock_guard<std::mutex> lock(mtx);
     //impede acesso simultâneo à lista de clientes
  
     info.jogadores = static_cast<int>(clientes.size());

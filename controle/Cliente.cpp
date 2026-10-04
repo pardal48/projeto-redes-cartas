@@ -161,7 +161,11 @@ int main() {
                 // Mostra a mesa forçando a exibição do descarte (não interage com a rede)
                 interface.mostrar_mesa(estado, true);
                 continue; 
-            } else if (!acao.empty()) {
+            } else if(acao=="MESA"){
+                cliente.enviar("MESA");
+                cliente.esperarMesa();
+            
+            }else if (!acao.empty()) {
                 cliente.enviar(acao); // Envia o comando (ex: JOGAR 0)
                 
                 // Em vez de sleep, pede a mesa atualizada e aguarda de forma segura

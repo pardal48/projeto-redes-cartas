@@ -97,7 +97,6 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
     
     if (!emAndamento) return;
     
-    
     //se outro jogador tiver jogado uma carta no turno dele
     if (aguardandoReacao) {
         if (acao == "JOGAR_NAO") {
@@ -109,7 +108,6 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         }
         return;
     }
-    
     
     // Valida se é a vez do jogador para as ações do turno normal
     int idAtual = ordemTurnos.front(); // Agora é diretamente o ID!
@@ -127,7 +125,10 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         comprarCarta(cliente, servidor);
     } else if (acao == "JOGAR") {
         int idxCarta, idAlvo = -1;
-        iss >> idxCarta;
+        if(!(iss >> idxCarta)){
+            servidor.enviarTudo(cliente.socket,"ERRO COMANDO_INVALIDO_USE_NUMEROS\n");
+            return;
+        }
         if (iss >> idAlvo) { /* Alvo lido */ }
         jogarCarta(cliente, idxCarta, idAlvo, servidor);
     } else {
@@ -205,10 +206,16 @@ void Partida::jogarCarta(ClienteConectado& cliente, int indiceCarta, int /*idAlv
     TipoCarta tipo = cartaJogada->getTipo();
 
     // Remove da mão e joga na pilha de descarte/efeito
-    
+    if (tipo == TipoCarta::Desarme || tipo == TipoCarta::Bomba || tipo == TipoCarta::Nao) {
+        cliente.jogador.adicionarCartaMao(std::move(cartaJogada)); // Devolve pra mão
+        servidor.enviarTudo(cliente.socket, "ERRO CARTA_DE_REACAO_NAO_PODE_SER_JOGADA_ASSIM\n");
+        return;
+    }
+    //aqui da pra tirar o if do se não for desarme bomba ou nao
     // Se não for uma carta de reação instantânea, aguarda o timer do NÃO[cite: 9]
     if (tipo != TipoCarta::Desarme && tipo != TipoCarta::Bomba  && tipo != TipoCarta::Nao) {
         aguardandoReacao = true;
+        std::string nomeCarta =(*cartaJogada).getNome();
         pilhaEfeitos.push_back(std::move(cartaJogada));
         pendentesRespostaNao.clear();
 
@@ -217,8 +224,8 @@ void Partida::jogarCarta(ClienteConectado& cliente, int indiceCarta, int /*idAlv
             pendentesRespostaNao.insert(id);
         }
         
-        servidor.broadcast("JOGOU " + std::to_string(cliente.jogador.getId()) + " " + cartaJogada->getNome()+ "\n");
-        servidor.broadcast("PERGUNTA_NAO " + std::to_string(cliente.jogador.getId()) + " " + cartaJogada->getNome()+ "\n");
+        servidor.broadcast("JOGOU " + std::to_string(cliente.jogador.getId()) + " " + nomeCarta+ "\n");
+        servidor.broadcast("PERGUNTA_NAO " + std::to_string(cliente.jogador.getId()) + " " + nomeCarta+ "\n");
     }
 }
 
@@ -266,7 +273,7 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
 
     auto carta = std::move(baralho.back());
     baralho.pop_back();
-
+    bool sobreviveu = true;
     if (carta->getTipo() == TipoCarta::Bomba) {
         servidor.broadcast("EXPLOSAO " + std::to_string(cliente.jogador.getId()) + "\n");
         
@@ -295,13 +302,15 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
             servidor.broadcast("DEFUSOU " + std::to_string(cliente.jogador.getId()) + "\n");
         } else {
             removerJogador(cliente.jogador.getId(), false, servidor);
+            sobreviveu=false;
         }
     } else {
+        std::string nomeCarta = (*carta).getNome();
         cliente.jogador.adicionarCartaMao(std::move(carta));
-        servidor.enviarTudo(cliente.socket, "COMPROU " + carta->getNome() + "\n");
+        servidor.enviarTudo(cliente.socket, "COMPROU " + nomeCarta + "\n");
     }
 
-    if (emAndamento) {
+    if (emAndamento && sobreviveu) {
         passarTurno(servidor);
     }
 }
@@ -322,7 +331,9 @@ void Partida::removerJogador(int idCliente, bool desconexao, ServidorTCP& servid
         numeroJogadoresVivos--;
         // Se o jogador estava pendente de responder ao NÃO, remove-o da lista de espera
         pendentesRespostaNao.erase(idCliente);
-        
+        if (aguardandoReacao && pendentesRespostaNao.empty()) {
+            aplicarEfeitosPendentes(servidor);
+        }
         // 2. Obtém a referência segura do jogador usando a nossa nova função
         auto alvo = obterJogadorPorId(idCliente);
         
@@ -362,7 +373,8 @@ void Partida::verificarFimDeJogo(ServidorTCP& servidor) {
     if (numeroJogadoresVivos <= 1) {
         emAndamento = false;
         if (!ordemTurnos.empty()) {
-            int vencedorId = jogadores[ordemTurnos.front()]->jogador.getId();
+            //int vencedorId = jogadores[ordemTurnos.front()]->jogador.getId();
+            int vencedorId = ordemTurnos.front();//analisar aqui
             servidor.broadcast("FIM_DE_JOGO VENCEDOR " + std::to_string(vencedorId) + "\n");
         }
     }
