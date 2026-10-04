@@ -30,8 +30,8 @@ void Partida::iniciar(ServidorTCP& servidor) {
     
     // Configura a ordem dos turnos
     ordemTurnos.clear();
-    for (size_t i = 0; i < jogadores.size(); ++i) {
-        ordemTurnos.push_back(i); 
+    for (auto& c : jogadores) {
+    ordemTurnos.push_back(c->jogador.getId()); // Guarda o ID, não o índice (i)
     }
 
     // 1. Cria o baralho base (sem defuses e sem kittens)[cite: 8, 9]
@@ -77,7 +77,7 @@ void Partida::iniciar(ServidorTCP& servidor) {
     std::shuffle(baralho.begin(), baralho.end(), rng);
 
     servidor.broadcast("JOGO_INICIADO\n");
-    servidor.broadcast("TURNO " + std::to_string(jogadores[ordemTurnos.front()]->jogador.getId()) + "\n");
+    servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");
 }
 
 // Roteador de Comandos
@@ -110,9 +110,10 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         return;
     }
     
+    
     // Valida se é a vez do jogador para as ações do turno normal
-    int idxAtual = ordemTurnos.front();
-    if (jogadores[idxAtual]->jogador.getId() != cliente.jogador.getId()) {
+    int idAtual = ordemTurnos.front(); // Agora é diretamente o ID!
+    if (idAtual != cliente.jogador.getId()) {
         servidor.enviarTudo(cliente.socket, "ERRO NAO_E_SEU_TURNO\n");
         return;
     }
@@ -145,7 +146,7 @@ void Partida::passarTurno(ServidorTCP& servidor) {
         ordemTurnos.push_back(atual);
         turnosPendentes = 1;
     }
-    servidor.broadcast("TURNO " + std::to_string(jogadores[ordemTurnos.front()]->jogador.getId()) + "\n");
+    servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");
 }
 
 void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor) {
@@ -173,8 +174,8 @@ void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, Se
             
             // Novo ciclo: quando um "NÃO" é jogado, todos precisam responder novamente para ver se jogam outro "NÃO"
             pendentesRespostaNao.clear();
-            for (int idx : ordemTurnos) {
-                pendentesRespostaNao.insert(jogadores[idx]->jogador.getId());
+            for (int id : ordemTurnos) {
+                pendentesRespostaNao.insert(id);
             }
             servidor.broadcast("PERGUNTA_NAO " + std::to_string(id) + " NAO\n");
             return;
@@ -212,8 +213,8 @@ void Partida::jogarCarta(ClienteConectado& cliente, int indiceCarta, int /*idAlv
         pendentesRespostaNao.clear();
 
         // Solicita resposta de TODOS os jogadores vivos para não revelar a mão de ninguém
-        for (int idx : ordemTurnos) {
-            pendentesRespostaNao.insert(jogadores[idx]->jogador.getId());
+        for (int id : ordemTurnos) {
+            pendentesRespostaNao.insert(id);
         }
         
         servidor.broadcast("JOGOU " + std::to_string(cliente.jogador.getId()) + " " + cartaJogada->getNome()+ "\n");
@@ -304,41 +305,54 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
         passarTurno(servidor);
     }
 }
+
+std::shared_ptr<ClienteConectado> Partida::obterJogadorPorId(int id) {
+    for (auto& c : jogadores) {
+        if (c->jogador.getId() == id) return c;
+    }
+    return nullptr; 
+}
+
 void Partida::removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor) {
-    auto it = std::find_if(ordemTurnos.begin(), ordemTurnos.end(), [this, idCliente](int idx) {
-        return jogadores[idx]->jogador.getId() == idCliente;
-    });
+    // 1. Procura o ID diretamente na ordemTurnos (já que agora ela guarda IDs)
+    auto it = std::find(ordemTurnos.begin(), ordemTurnos.end(), idCliente);
 
     if (it != ordemTurnos.end()) {
-        int idx = *it;
         ordemTurnos.erase(it);
         numeroJogadoresVivos--;
-        // Se o jogador estava pendente de responder ao NÃO, remove ele da lista de espera
+        // Se o jogador estava pendente de responder ao NÃO, remove-o da lista de espera
         pendentesRespostaNao.erase(idCliente);
         
-        if (desconexao) {
-            // Regra: se desconecta vivo, cartas pro baralho e remove defuse e uma bomba
-            while (jogadores[idx]->jogador.getTamanhoMao() > 0) {
-                auto carta = jogadores[idx]->jogador.removerCartaMao(0);
-                if (carta->getNome() != "DEFUSE") {
-                    baralho.push_back(std::move(carta));
+        // 2. Obtém a referência segura do jogador usando a nossa nova função
+        auto alvo = obterJogadorPorId(idCliente);
+        
+        // 3. Só tenta mexer nas cartas se o jogador ainda for encontrado
+        if (alvo != nullptr) {
+            if (desconexao) {
+                // Regra: se desconecta vivo, cartas pro baralho e remove defuse e uma bomba
+                while (alvo->jogador.getTamanhoMao() > 0) {
+                    auto carta = alvo->jogador.removerCartaMao(0);
+                    if (carta->getNome() != "DEFUSE") {
+                        baralho.push_back(std::move(carta));
+                    }
                 }
-            }
-            // Remove aleatoriamente uma bomba para compensar
-            for (auto bit = baralho.begin(); bit != baralho.end(); ++bit) {
-                if ((*bit)->getNome() == "BOMBA") {
-                    baralho.erase(bit); 
-                    break;
+                // Remove aleatoriamente uma bomba para compensar
+                for (auto bit = baralho.begin(); bit != baralho.end(); ++bit) {
+                    if ((*bit)->getNome() == "BOMBA") {
+                        baralho.erase(bit); 
+                        break;
+                    }
                 }
-            }
-            auto rng = std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count());
-            std::shuffle(baralho.begin(), baralho.end(), rng);
-        } else {
-            // Morreu por explosão: move todas as cartas da mão para o descarte
-            while (jogadores[idx]->jogador.getTamanhoMao() > 0) {
-                pilhaDescarte.push_back(jogadores[idx]->jogador.removerCartaMao(0));
+                auto rng = std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count());
+                std::shuffle(baralho.begin(), baralho.end(), rng);
+            } else {
+                // Morreu por explosão: move todas as cartas da mão para o descarte
+                while (alvo->jogador.getTamanhoMao() > 0) {
+                    pilhaDescarte.push_back(alvo->jogador.removerCartaMao(0));
+                }
             }
         }
+        
         servidor.broadcast("MORREU " + std::to_string(idCliente) + "\n");
         verificarFimDeJogo(servidor);
     }

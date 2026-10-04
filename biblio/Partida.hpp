@@ -42,13 +42,13 @@ private:
     //void distribuirCartas(ServidorTCP& servidor);
     //void embaralharBaralho();
     void aplicarEfeitosPendentes(ServidorTCP& servidor);
-    void removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor); // Trata mortes e desconexões
+    
     void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
 public:
     // Construtor
     explicit Partida(std::vector<std::shared_ptr<ClienteConectado>>& listaClientes);
     ~Partida();
-
+    void removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor); // Trata mortes e desconexões
     // --- Fluxo Principal ---
     void iniciar(ServidorTCP& servidor);
     void processarComando(ClienteConectado& cliente, const std::string& comando, ServidorTCP& servidor);
@@ -64,6 +64,7 @@ public:
     // --- Getters e Utilitários ---
     bool estaEmAndamento() const { return emAndamento; }
     std::string obterEstadoMesa(const ClienteConectado& cliente) const;
+    std::shared_ptr<ClienteConectado>   obterJogadorPorId(int id);
 };
 
 #endif // PARTIDA_HPP

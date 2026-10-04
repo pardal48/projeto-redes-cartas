@@ -139,11 +139,22 @@ int main() {
         cliente.esperarMesa(); // Aguarda a foto inicial da mesa
         
         while (cliente.conectado()) {
+            
             std::string estado = cliente.obterEstadoMesaLocal();
+            
+            // Antes de pedir o comando, verifique de quem é a vez
+            while (cliente.obterTurnoAtual() != cliente.meuId() && cliente.conectado()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Espera meio segundo e checa de novo
+            }       
+            if (!cliente.conectado()) break; // Sai se a conexão cair enquanto esperava
+
+            // Só desenha a mesa e pede a ação se for o turno dele
             interface.mostrar_mesa(estado, false);
-            
             std::string acao = interface.ler_comando_jogo();
-            
+            if (acao != "MESA" && acao != "SAIR" && acao != "DESCARTE" && !acao.empty()) {
+                cliente.setTurnoAtual(-1); 
+            }
+
             if (acao == "SAIR") {
                 break;
             } else if (acao == "DESCARTE") {

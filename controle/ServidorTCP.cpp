@@ -175,6 +175,10 @@ void ServidorTCP::atenderCliente(std::shared_ptr<ClienteConectado> client) {
 // Remoção e close(socket) juntos sob o lock: ninguém usa o fd depois de fechado.
 void ServidorTCP::removerCliente(const std::shared_ptr<ClienteConectado>& client) {
     std::lock_guard<std::mutex> lock(mtx);
+    // Se a partida está rolando, avisa ela ANTES de deletar!
+    if (jogoIniciado && partidaAtual) {
+        partidaAtual->removerJogador(client->jogador.getId(), true, *this);
+    }
     //apaga o cliente da lista de clientes conectados
     // o remove joga o ponteiro para o final do vetor, e o erase remove ele de fato, liberando a memória
     clientes.erase(std::remove(clientes.begin(), clientes.end(), client), clientes.end());
@@ -279,30 +283,7 @@ size_t ServidorTCP::jogadoresVivosCount() const {
     return contador;
 }
 
-void ServidorTCP::verificarFimDeJogo() {
-    //esse mutex depende, se grantirmos que já vai estar lockado chegando aqui não precisa
-    //std::lock_guard<std::mutex> lock(mtx);
-    
-    // Se sobrar apenas 1 jogador vivo com a partida em andamento
-    if (jogoIniciado && jogadoresVivosCount() <= 1) {
-        std::shared_ptr<ClienteConectado> vencedor = nullptr;
-        for (const auto& client : clientes) {
-            if ((*client).jogador.estaVivo()) {
-                vencedor = client;
-                break;
-            }
-        }
 
-        if (vencedor) {
-            std::cout << "Partida encerrada! Vencedor: " << (*vencedor).jogador.getNome() << "\n";
-            broadcast("FIM_DE_JOGO " + std::to_string((*vencedor).jogador.getId()) + "\n");
-        } else {
-            broadcast("FIM_DE_JOGO EMPATE\n");
-        }
-        
-        jogoIniciado = false; // Retorna para o lobby
-    }
-}
 
 void ServidorTCP::broadcast(const std::string& msg) {//manda informação para todos os clientes conectados, como o estado do lobby ou mensagens de jogo
     for (auto& client : clientes) enviarTudo((*client).socket, msg);
@@ -357,24 +338,7 @@ std::string ServidorTCP::estadoComoTexto() const {//estado atual do lobby como u
     return s + "\n";
 }
 
-/*
-void ServidorTCP::enviar(int clientID, const std::string& mensagem){
-    send(clientID, mensagem.data(), mensagem.size(), 0);
-}
-//em receber podemos por outros tipos pra serem recebidos, isso é só um place holder
-std::string ServidorTCP::receber(int clienteID){
-    char buffer[1024];
 
-    int bytes = recv(clienteID,buffer,sizeof(buffer),0);
-
-    if (bytes <= 0) {
-        return "";
-    }
-
-    return std::string(buffer,bytes);
-
-}
-*/
 int ServidorTCP::getporta() const {
     return porta;
 }

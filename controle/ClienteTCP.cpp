@@ -250,8 +250,10 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             mesaAtualizada = true; // Avisa a thread principal que a mesa chegou
             
             mudou = true;
-        } else if (linha.rfind("TURNO", 0) == 0 || linha.rfind("JOGOU", 0) == 0 || linha.rfind("COMPROU", 0) == 0 || linha.rfind("EXPLOSAO", 0) == 0) {
-            // Imprime direto no terminal avisos importantes do servidor
+        } else if (linha.rfind("TURNO ", 0) == 0) {
+            try { turnoAtual = std::stoi(linha.substr(6)); } catch (...) {}
+            std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
+        } else if (linha.rfind("JOGOU", 0) == 0 || linha.rfind("COMPROU", 0) == 0 || linha.rfind("EXPLOSAO", 0) == 0) {
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
         }
     }
@@ -278,5 +280,12 @@ void ClienteTCP::esperarMesa() {
     }
 }
 
-
+int ClienteTCP::obterTurnoAtual() {
+    std::lock_guard<std::mutex> lock(mtx);
+    return turnoAtual;
+}
  
+void ClienteTCP::setTurnoAtual(int t) {
+    std::lock_guard<std::mutex> lock(mtx);
+    turnoAtual = t;
+}

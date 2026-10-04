@@ -59,8 +59,8 @@ public:
    
     std::string obterEstadoMesaLocal();
     void esperarMesa();
-
-
+    int obterTurnoAtual();
+    void setTurnoAtual(int t);
  
 private:
     void receber();// thread de recepção: lê o socket e atualiza o estado do lobby
@@ -81,6 +81,8 @@ private:
     std::atomic<bool> comecou{false};// true se o servidor enviou a mensagem "INICIAR" (o jogo começou)
     std::string estadoMesaAtual;
     bool mesaAtualizada = false;
+
+    int turnoAtual = -1;
     
 /*
 void conectar(const std::string& ip, int port);
