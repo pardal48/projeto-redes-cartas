@@ -1,39 +1,37 @@
 #pragma once
-
-#include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include <memory>
-class Carta; // Forward declaration of the Carta class
-class Jogador { 
-private:
-    int id;
-    std::string nome;
-    
-    std::vector<std::unique_ptr<Carta>> cartas; 
-    bool vivo = true;
-    bool pronto = false; // Indicates whether the player is ready
-    // vetor de ponteiros únicos para objetos Carta, ou seja, cada carta é de propriedade exclusiva 
-    //do jogador e será destruída automaticamente quando o jogador for destruído.
+#include "Carta.hpp"
+
+class Jogador {
 public:
-    Jogador();
-    ~Jogador();
-    
-    void setId(int id);
-    int getId() const;// const indica que o método não modifica o estado do objeto, ou seja, não altera nenhum membro da classe.
-    
-    std::string getNome() const;
-    void setNome(const std::string& nome);
-    
-    void setPronto(bool pronto);
-    bool getPronto() const;
+    void setId(int novoId) { id = novoId; }
+    int getId() const { return id; }
 
-    bool estaVivo() const;
-    void eliminar();
-    const std::vector<std::unique_ptr<Carta>>& getMao() const;
-    void adicionarCartaMao(std::unique_ptr<Carta> carta);
-    std::unique_ptr<Carta> removerCartaMao(size_t indice);
+    const std::string& getNome() const { return nome; }
+    void setNome(const std::string& novoNome) { nome = novoNome; }
+
+    void setPronto(bool p) { pronto = p; }
+    bool getPronto() const { return pronto; }
+
+    bool estaVivo() const { return vivo; }
+    void eliminar() { vivo = false; }
+
+    // ---- mão ----
+    const std::vector<std::unique_ptr<Carta>>& getMao() const { return cartas; }
     size_t getTamanhoMao() const { return cartas.size(); }
-};
+    void adicionarCartaMao(std::unique_ptr<Carta> carta);
+    std::unique_ptr<Carta> removerCartaMao(size_t indice);  // nullptr se o índice for inválido
 
+    // Volta ao estado de lobby depois de uma partida (mantém id e nome).
+    void reiniciarParaLobby();
+
+private:
+    int id = -1;
+    std::string nome;
+    bool pronto = false;
+    bool vivo = true;
+    std::vector<std::unique_ptr<Carta>> cartas;
+};

@@ -1,74 +1,84 @@
-#ifndef PARTIDA_HPP
-#define PARTIDA_HPP
-#include "Carta.hpp"
-#include <vector>
+#pragma once
 #include <deque>
 #include <memory>
-#include <mutex>
+#include <random>
 #include <string>
-#include <unordered_set>
-// Forward declarations para evitar dependências circulares
-class Carta;
-struct ClienteConectado; 
+#include <vector>
+
+#include "Carta.hpp"
+#include "Conexao.hpp"
+
 class ServidorTCP;
 
+// Regras e estado de uma partida de Exploding Kittens.
+// Todos os métodos públicos são chamados com o mutex do servidor já travado.
+//
+// Protocolo servidor -> cliente gerado aqui:
+//   TURNO <id>               de quem é a vez (sempre seguido de MESA_ESTADO)
+//   MESA_ESTADO <...>        estado da mesa, personalizado para cada jogador
+//   JOGOU <id> <carta>       carta jogada (abre a janela de reação)
+//   PERGUNTA_NAO <id> <carta>  pergunta privada: quer jogar NAO?
+//   JOGOU_NAO <id> | CANCELADO | EMBARALHOU | FUTURO <a> <b> <c>
+//   COMPROU <id> | COMPROU_VOCE <carta>
+//   EXPLOSAO <id> | DEFUSOU <id> | MORREU <id> | FIM_DE_JOGO VENCEDOR <id>
 class Partida {
-private:
-    // --- Estruturas de Cartas ---
-    std::vector<std::unique_ptr<Carta>> baralho;
-    std::vector<std::unique_ptr<Carta>> pilhaDescarte;
-   
-    
-    // --- Estruturas de Clientes (Jogadores) ---
-    // Referência para a lista de clientes mantida pelo Servidor/Lobby
-    std::vector<std::shared_ptr<ClienteConectado>>& jogadores;
-    
-    // Usamos deque para manter a ordem dos turnos (facilita pular ou remover quem morrer)
-    std::deque<int> ordemTurnos; 
-
-    // --- Estado do Jogo ---
-    bool emAndamento{false};
-    size_t indiceJogadorAtual{0};
-    int numeroJogadoresVivos{0};
-    int turnosPendentes{1}; // Essencial para gerenciar a carta "Atacar" (2 turnos)
-
-    // --- Sistema de Efeitos e Timer ("Não") ---
-    bool aguardandoReacao{false};
-    std::vector<std::unique_ptr<Carta>> pilhaEfeitos;// Acumula os "Não" jogados em sequência[cite: 9]
-
-    //std::unordered_set<int> pendentesRespostaNao; 
-    std::deque<int> filaRespostaNao;    // IDs dos jogadores que faltam responder
-    
-    // --- Métodos Internos Auxiliares ---
-    //void distribuirCartas(ServidorTCP& servidor);
-    //void embaralharBaralho();
-    void aplicarEfeitosPendentes(ServidorTCP& servidor);
-    
-    void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
-    int idAutorUltimaCarta = -1;
 public:
-    // Construtor
-    explicit Partida(std::vector<std::shared_ptr<ClienteConectado>>& listaClientes);
+    using ListaClientes = std::vector<std::shared_ptr<ClienteConectado>>;
+
+    explicit Partida(const ListaClientes& clientes);
     ~Partida();
-    void removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor); // Trata mortes e desconexões
-    // --- Fluxo Principal ---
+
     void iniciar(ServidorTCP& servidor);
     void processarComando(ClienteConectado& cliente, const std::string& comando, ServidorTCP& servidor);
-    void verificarFimDeJogo(ServidorTCP& servidor);
-    void passarTurno(ServidorTCP& servidor);
+    void removerJogador(int idJogador, ServidorTCP& servidor);  // desconexão
+    bool emAndamento() const { return andamento; }
 
-    // --- Ações de Jogo ---
-    // Separadas do processarComando para deixar o código mais limpo
-    void comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor); // Encerra o turno[cite: 8]
-    void jogarCarta(ClienteConectado& cliente, int indiceCarta, int idAlvo, ServidorTCP& servidor);
-    void reagirComNao(ClienteConectado& cliente, ServidorTCP& servidor);
+private:
+    using Baralho = std::vector<std::unique_ptr<Carta>>;
+    enum class Motivo { Explosao, Desconexao };
 
-    // --- Getters e Utilitários ---
-    bool estaEmAndamento() const { return emAndamento; }
+    // ---- preparação ----
+    void montarBaralho();
+
+    // ---- turnos ----
+    void anunciarTurno(ServidorTCP& servidor);  // TURNO + mesa, UMA vez por mudança de estado
+    void consumirTurno();                       // gasta um turno pendente; passa a vez se acabaram
+    void passarParaProximo();
+
+    // ---- ações do jogador da vez ----
+    void comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor);
+    void jogarCarta(ClienteConectado& cliente, int indice, ServidorTCP& servidor);
+
+    // ---- janela de reação (cartas NAO) ----
+    void abrirJanelaReacao(ServidorTCP& servidor);
+    void perguntarAoPrimeiro(ServidorTCP& servidor);
+    void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
+    void resolverEfeitos(ServidorTCP& servidor);
+    void aplicarEfeito(TipoCarta tipo, ServidorTCP& servidor);
+    void descartarEfeitosPendentes();
+
+    // ---- eliminação / fim ----
+    void eliminarJogador(int idJogador, Motivo motivo, ServidorTCP& servidor);
+    bool verificarFimDeJogo(ServidorTCP& servidor);
+    void removerUmaBombaDoBaralho();
+
+    // ---- utilidades ----
+    std::shared_ptr<ClienteConectado> obterJogadorPorId(int idJogador) const;
     std::string obterEstadoMesa(const ClienteConectado& cliente) const;
-    std::shared_ptr<ClienteConectado>   obterJogadorPorId(int id);
-
     void notificarTodosMesa(ServidorTCP& servidor);
-};
+    static void enviar(const ClienteConectado& cliente, const std::string& msg);
 
-#endif // PARTIDA_HPP
+    ListaClientes jogadores;          // todos os que começaram a partida (vivos ou não)
+    std::mt19937 rng;
+
+    Baralho baralho;                  // topo = back()
+    Baralho pilhaDescarte;
+    Baralho pilhaEfeitos;             // carta jogada + NAOs empilhados, aguardando resolução
+
+    std::deque<int> ordemTurnos;      // só jogadores vivos; front() = jogador da vez
+    std::deque<int> filaRespostaNao;  // quem ainda precisa responder à pergunta do NAO
+    int turnosPendentes = 1;          // turnos que o jogador da vez ainda tem que jogar
+    int idUltimoAutor = -1;           // autor da carta (ou NAO) que está no topo da pilha de efeitos
+    bool aguardandoReacao = false;
+    bool andamento = false;
+};

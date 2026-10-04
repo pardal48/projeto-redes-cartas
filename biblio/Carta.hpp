@@ -1,48 +1,32 @@
 #pragma once
-
-#include <iostream>
 #include <string>
-#include <vector>
-#include "Jogador.hpp"
-//class Jogador; // Forward declaration of the Jogador class
-class ServidorTCP;
-class ClienteConectado;
+
+// Tipos de carta do baralho.
 enum class TipoCarta {
-    // Cartas de Efeito
-    Bomba,
-    Desarme,
+    Bomba,       // Exploding Kitten
+    Desarme,     // Defuse
     Ataque,
     Pular,
-    Nao,
+    Favor,
     Embaralhar,
     Futuro,
-    Favor,
-    // Cartas Sem Efeito (Gatos)
-    GatoMelancia,
-    GatoTaco,
-    GatoBarba,
-    GatoBatata,
-    GatoAranha
+    Nao,         // "Nem penses!"
+    GatoAranha, GatoBarba, GatoBatata, GatoMelancia, GatoTaco
 };
-class Carta{
 
-    private:
-        int id;
-        std::string nome;
-        std::string descricao;
-        TipoCarta tipo;
+class Carta {
+public:
+    Carta(int id, std::string nome, std::string descricao, TipoCarta tipo);
 
+    void setId(int novoId) { id = novoId; }
+    int getId() const { return id; }
+    const std::string& getNome() const { return nome; }
+    const std::string& getDescricao() const { return descricao; }
+    TipoCarta getTipo() const { return tipo; }
 
-        public:
-        Carta(int id, std::string nome, std::string descricao,TipoCarta tipo);
-        ~Carta();
-        //virtual void aplicarEfeito(Jogador& jogador)=0; // Carta é classe abstrata, um pouco diferente do java
-        //virtual void aplicarEfeito(ServidorTCP& servidor, std::shared_ptr<ClienteConectado> jogadorAlvo) = 0;
-        void setId(int id);
-        int getId() const ;
-        std::string getNome() const ;
-        std::string getDescricao() const;
-        TipoCarta getTipo() const;
-        //construtor pras subclasses de carta
-       
+private:
+    int id;
+    std::string nome;
+    std::string descricao;
+    TipoCarta tipo;
 };

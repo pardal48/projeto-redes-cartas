@@ -2,63 +2,47 @@
 #include <mutex>
 #include <string>
 #include <vector>
- 
-#include "ClienteTCP.hpp"  // só para o tipo ClienteTCP::ListaJogadores
- 
-// ---- MÚLTIPLOS SERVIDORES (desativado) ----
-#if 0
-#include "Conexao.hpp"  // ServidorInfo (ajuste o nome do arquivo)
-#endif
- 
-// Tudo o que aparece na tela (e a leitura do que o usuário digita) fica aqui.
-//
-// A thread de recepção do cliente e a thread principal imprimem ao mesmo tempo,
-// então toda saída passa pelo 'mtxTela' desta classe. A Interface é a dona
-// desse mutex: quem quiser imprimir algo usa um método dela.
 
+#include "ClienteTCP.hpp"
+
+// Toda a entrada/saída do terminal do cliente.
+// Saída: protegida por mtxTela (a thread de recepção também imprime).
+// Entrada: lida com read()+poll() e buffer próprio, para o timeout não se perder com o buffer do std::cin.
 class Interface {
 public:
-    
+    enum class ComandoLobby { Nenhum, AlternarPronto, Sair };
 
-        enum class ComandoLobby { Nenhum, AlternarPronto, Sair };
- 
-    // tela inicial 
-    bool TelaInicial();  // false = usuário apertou ESC
- 
-    //nome
-    // false = fim da entrada (Ctrl+D)
-    bool pedir_nome(std::string& nome);
+    // ---- início ----
+    bool TelaInicial();                       // false = o jogador pediu para sair (ESC)
+
+    // ---- nome ----
+    bool pedir_nome(std::string& nome);       // false = fim da entrada
     void mostrar_nome_invalido();
- 
-    //lobby 
-    // Não limpa a tela: cada atualização é impressa embaixo da anterior.
-    //aqui é interessante implementar a limpeza de tela se tiverem tempo
-    // Pode ser chamada pela thread de recepção.
-    void mostrar_lobby(const ClienteTCP::ListaLobby& jogadoresdoLobby,
-                       int meuId, int capacidade = 5);
- 
-    // Espera até 'timeoutMs' por uma linha digitada (P ou S + Enter).
-    // Nenhum = nada digitado no prazo (ou comando desconhecido).
+
+    // ---- lobby ----
+    void mostrar_lobby(const ClienteTCP::ListaLobby& jogadores, int meuId, int capacidade = 5);
     ComandoLobby ler_comando_lobby(int timeoutMs);
- 
-    //mensagens gerais 
+
+    // ---- partida ----
     void mostrar_partida_iniciando();
+    void mostrar_mesa(const std::string& estadoMesa, ModoJogo modo);
+    void mostrar_descarte(const std::string& estadoMesa);
+    void mostrar_prompt(ModoJogo modo);
+    void mostrar_evento(const std::string& mensagem);
+    std::string ler_comando_jogo(int timeoutMs = 200);  // "" = nada digitado; "SAIR" = fim da entrada
+
+    // ---- mensagens gerais ----
     void mostrar_conexao_perdida();
     void mostrar_erro(const std::string& mensagem);
-    void mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte = false,bool ehMeuTurno=false);
-    std::string ler_comando_jogo(int timeoutMs=0);
- 
-    // ---- MÚLTIPLOS SERVIDORES (desativado) ----
-#if 0
-    void mostrar_servidores(const std::vector<ServidorInfo>& servidores);
-    void escolher_servidor(const std::vector<ServidorInfo>& servidores, int& servidorEscolhido);
-#endif
- 
+
 private:
-    char lerTecla();
-    std::mutex mtxTela;//mutex para proteger a saída na tela, evitando que múltiplas threads imprimam ao mesmo tempo
+    enum class Leitura { Linha, Timeout, Fim };
 
+    Leitura lerLinha(std::string& linha, int timeoutMs);  // timeoutMs < 0: espera indefinidamente
+    static char lerTecla();
+    static std::vector<std::string> dividirSegmentos(const std::string& estadoMesa);
+    void imprimirPrompt(ModoJogo modo);                   // mtxTela já travado
 
-
-
+    std::mutex mtxTela;
+    std::string bufferEntrada;
 };

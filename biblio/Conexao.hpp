@@ -1,26 +1,26 @@
 #pragma once
+#include <string>
+#include <utility>
+
 #include "Jogador.hpp"
 
-struct ClienteConectado {
-
-    int socket;
-    Jogador jogador;
-};
-
+// Informações públicas de um servidor (nome, porta, ocupação).
 struct ServidorInfo {
     std::string nome;
-    std::string endereco;
-    int porta;
-    int jogadores;
+    std::string endereco = "localhost";
+    int porta = 0;
+    int jogadores = 0;
     int capacidade = 5;
 
-    bool estahCheio() const {
-        return jogadores >= capacidade;
-    }
+    ServidorInfo() = default;
+    ServidorInfo(std::string n, int p) : nome(std::move(n)), porta(p) {}
 
-    /*ServidorInfo(const std::string& nome, int porta)
-        : nome(nome), porta(porta), jogadores(0) {
-        // Inicializa o endereço como "localhost" ou outro valor padrão
-        endereco = "localhost";
-    }*/
+    bool estahCheio() const { return jogadores >= capacidade; }
+};
+
+// Um cliente conectado ao servidor: o socket e o jogador associado.
+// socket == -1 significa "já desconectado" (ninguém deve enviar nada a ele).
+struct ClienteConectado {
+    int socket = -1;
+    Jogador jogador;
 };
