@@ -155,14 +155,13 @@ void Partida::passarTurno(ServidorTCP& servidor) {
 void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor) {
     if(!aguardandoReacao) return;
     int id = cliente.jogador.getId();
-    idAutorUltimaCarta = id;
+    
     if (filaRespostaNao.front() != id) {
         servidor.enviarTudo(cliente.socket, "ERRO NAO_E_SUA_VEZ_DE_REAGIR\n");
         return;
     }
 
     if (querJogar) {
-        // Procura se o jogador realmente possui a carta NÃO
         int idxNao = -1;
         const auto& mao = cliente.jogador.getMao();
         for (size_t i = 0; i < mao.size(); ++i) {
@@ -173,41 +172,45 @@ void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, Se
         }
         
         if (idxNao != -1) {
+            idAutorUltimaCarta = id; // O jogador que jogou o NAO passa a ser o autor atual
             auto cartaNao = cliente.jogador.removerCartaMao(idxNao);
             pilhaEfeitos.push_back(std::move(cartaNao));
             servidor.broadcast("JOGOU_NAO " + std::to_string(id) + "\n");
             
-            // Novo ciclo: quando um "NÃO" é jogado, todos precisam responder novamente para ver se jogam outro "NÃO"
+            // Recria a fila com todos os outros jogadores ativos
             filaRespostaNao.clear();
             for (int idAtivo : ordemTurnos) {
                 if (idAtivo != id) {
                     filaRespostaNao.push_back(idAtivo);
                 } 
             }
+
             if (filaRespostaNao.empty()) {
                 aplicarEfeitosPendentes(servidor);
             } else {
-                servidor.broadcast("PERGUNTA_NAO " + std::to_string(id) + " NAO\n");
+                // Pergunta APENAS ao primeiro da nova fila
+                auto alvo = obterJogadorPorId(filaRespostaNao.front());
+                if (alvo) {
+                    servidor.enviarTudo(alvo->socket, "PERGUNTA_NAO " + std::to_string(id) + " NAO\n");
+                }
             }
             return;
         } else {
             servidor.enviarTudo(cliente.socket, "ERRO VOCE_NAO_TEM_A_CARTA_NAO\n");
-            // Trata como PASSO se o jogador tentou enganar o servidor sem ter a carta
         }
     }
     
-    // Registra a passagem/resposta do jogador
+    // Registo de PASSO
     filaRespostaNao.pop_front();
     
-    // Se todos responderam, resolve a pilha na thread principal
     if (filaRespostaNao.empty()) {
         aplicarEfeitosPendentes(servidor);
-    }else {
-        // Pergunta para o próximo jogador da fila
-        int idAutorAtual = pilhaEfeitos.empty() ? -1 : 1; // Ou o ID de quem jogou a última carta
+    } else {
+        // Pergunta APENAS ao próximo jogador da fila
         auto alvo = obterJogadorPorId(filaRespostaNao.front());
         if (alvo) {
-            servidor.enviarTudo(alvo->socket, "PERGUNTA_NAO " + std::to_string(idAutorAtual) + " CARTA\n");
+            std::string nomeCarta = pilhaEfeitos.empty() ? "CARTA" : pilhaEfeitos.back()->getNome();
+            servidor.enviarTudo(alvo->socket, "PERGUNTA_NAO " + std::to_string(idAutorUltimaCarta) + " " + nomeCarta + "\n");
         }
     }
 }
@@ -351,10 +354,8 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
 
     if (emAndamento && sobreviveu) {
         passarTurno(servidor);
-    }
+    }else {notificarTodosMesa(servidor);}
     
-    // Atualiza a mesa de todos os jogadores vivos
-    notificarTodosMesa(servidor);
 }
 
 std::shared_ptr<ClienteConectado> Partida::obterJogadorPorId(int id) {

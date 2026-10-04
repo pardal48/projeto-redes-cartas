@@ -156,9 +156,13 @@ void Interface::mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte
     }
 }
 
-std::string Interface::ler_comando_jogo() {
+std::string Interface::ler_comando_jogo(int timeoutMs) {
+    if (timeoutMs > 0) {
+        pollfd p{STDIN_FILENO, POLLIN, 0};
+        if (poll(&p, 1, timeoutMs) <= 0) return ""; // Retorna vazio se não houver dados no teclado
+    }
     std::string linha;
-    std::getline(std::cin, linha);
+    if (!std::getline(std::cin, linha)) return "SAIR";
     for(auto &c : linha) c = toupper(c); // Converte para maiúsculo
     return linha;
 }

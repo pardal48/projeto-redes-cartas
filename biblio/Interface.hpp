@@ -46,7 +46,7 @@ public:
     void mostrar_conexao_perdida();
     void mostrar_erro(const std::string& mensagem);
     void mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte = false,bool ehMeuTurno=false);
-    std::string ler_comando_jogo();
+    std::string ler_comando_jogo(int timeoutMs=0);
  
     // ---- MÚLTIPLOS SERVIDORES (desativado) ----
 #if 0

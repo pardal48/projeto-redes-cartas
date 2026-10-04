@@ -291,6 +291,9 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             mudou=true;
         }else if (linha.rfind("ERRO", 0) == 0) {
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
+            aguardandoMinhaCarta = false;
+            aguardandoNao = false;
+            mudou = true;
             // Se for um erro no meio do jogo, devolve o turno para tentar de novo
             /*
             if (linha != "ERRO NOME_INVALIDO" && linha != "ERRO LOBBY_CHEIO") {

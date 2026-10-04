@@ -104,17 +104,22 @@ int main() {
     
     
     cliente.aoAtualizar = [&] {
+        static std::string ultimoEstadoMesa = ""; // Cache da string
+        static bool ultimoTurno = false;          // Cache do estado do turno
+
         if (noLobby) {
             interface.mostrar_lobby(cliente.lobby(), cliente.meuId());
         } else if (emPartida) {
             std::string estado = cliente.obterEstadoMesaLocal();
-            if (!estado.empty()) {
-                // Calcula se o utilizador está apto a enviar o comando de turno regular
-                bool ehMeuTurno = (cliente.obterTurnoAtual() == cliente.meuId() 
-                                  && !cliente.estaAguardandoOutrosReagirem() 
-                                  && !cliente.estaAguardandoNao());
-                
-                // Passa o estado de turno para a interface
+            
+            bool ehMeuTurno = (cliente.obterTurnoAtual() == cliente.meuId() 
+                              && !cliente.estaAguardandoOutrosReagirem() 
+                              && !cliente.estaAguardandoNao());
+            
+            // Só desenha se a string da mesa mudou OU se o seu estado de turno mudou
+            if (!estado.empty() && (estado != ultimoEstadoMesa || ehMeuTurno != ultimoTurno)) {
+                ultimoEstadoMesa = estado;
+                ultimoTurno = ehMeuTurno;
                 interface.mostrar_mesa(estado, false, ehMeuTurno);
             }
         }
@@ -183,7 +188,7 @@ int main() {
             }
             
             // Ações do turno local
-            std::string acao = interface.ler_comando_jogo();
+            std::string acao = interface.ler_comando_jogo(200);
             
             if (acao == "SAIR") {
                 break;
@@ -195,9 +200,11 @@ int main() {
                 cliente.enviar("MESA");
                 cliente.esperarMesa();
             } else if (!acao.empty()) {
+                if (acao.rfind("JOGAR", 0) == 0) {
+                    cliente.setAguardandoOutrosReagirem(true); // Entra em modo de espera local imediatamente!
+                }
                 cliente.enviar(acao); 
-                cliente.enviar("MESA");
-                cliente.esperarMesa(); 
+              
             }
         }
         
