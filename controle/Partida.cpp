@@ -159,7 +159,7 @@ void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, Se
         int idxNao = -1;
         const auto& mao = cliente.jogador.getMao();
         for (size_t i = 0; i < mao.size(); ++i) {
-            if (mao[i]->getNome() == "NAO") {
+            if (mao[i]->getTipo() == TipoCarta::Nao) {
                 idxNao = static_cast<int>(i);
                 break;
             }
