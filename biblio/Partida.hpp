@@ -36,14 +36,16 @@ private:
     bool aguardandoReacao{false};
     std::vector<std::unique_ptr<Carta>> pilhaEfeitos;// Acumula os "Não" jogados em sequência[cite: 9]
 
-    std::unordered_set<int> pendentesRespostaNao; // IDs dos jogadores que faltam responder
-
+    //std::unordered_set<int> pendentesRespostaNao; 
+    std::deque<int> filaRespostaNao;    // IDs dos jogadores que faltam responder
+    
     // --- Métodos Internos Auxiliares ---
     //void distribuirCartas(ServidorTCP& servidor);
     //void embaralharBaralho();
     void aplicarEfeitosPendentes(ServidorTCP& servidor);
     
     void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
+    int idAutorUltimaCarta = -1;
 public:
     // Construtor
     explicit Partida(std::vector<std::shared_ptr<ClienteConectado>>& listaClientes);
@@ -65,6 +67,8 @@ public:
     bool estaEmAndamento() const { return emAndamento; }
     std::string obterEstadoMesa(const ClienteConectado& cliente) const;
     std::shared_ptr<ClienteConectado>   obterJogadorPorId(int id);
+
+    void notificarTodosMesa(ServidorTCP& servidor);
 };
 
 #endif // PARTIDA_HPP

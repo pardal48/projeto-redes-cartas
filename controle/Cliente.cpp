@@ -90,17 +90,35 @@ int main() {
     ClienteTCP cliente;
    
     std::atomic<bool> noLobby{false};
+    std::atomic<bool> emPartida{false};
     // Definido antes de conectar(): a thread de recepção lê este callback.
     // Ele roda na thread de recepção; a Interface cuida do mutex da tela.
     //magia negra aqui, depois descubro
-    cliente.aoAtualizar = [&] {
-        if (noLobby) interface.mostrar_lobby(cliente.lobby(), cliente.meuId());
-    };
- 
+    // CONEXÃO COM O SERVIDOR
+    std::cout << "Conectando ao servidor (" << ip << ":" << porta << ")...\n";
     if (!cliente.conectar(ip, porta)) {
-        interface.mostrar_erro("Nao foi possivel conectar ao servidor.");
+        std::cerr << "Erro: Nao foi possivel conectar ao servidor!\n";
         return 1;
     }
+    
+    
+    
+    cliente.aoAtualizar = [&] {
+        if (noLobby) {
+            interface.mostrar_lobby(cliente.lobby(), cliente.meuId());
+        } else if (emPartida) {
+            std::string estado = cliente.obterEstadoMesaLocal();
+            if (!estado.empty()) {
+                // Calcula se o utilizador está apto a enviar o comando de turno regular
+                bool ehMeuTurno = (cliente.obterTurnoAtual() == cliente.meuId() 
+                                  && !cliente.estaAguardandoOutrosReagirem() 
+                                  && !cliente.estaAguardandoNao());
+                
+                // Passa o estado de turno para a interface
+                interface.mostrar_mesa(estado, false, ehMeuTurno);
+            }
+        }
+    };
  
     //escolha do nome
     std::string nome;
@@ -133,47 +151,57 @@ int main() {
     noLobby = false;
     if (cliente.iniciou()) {
         interface.mostrar_partida_iniciando();
+        emPartida = true; // Ativa a renderização contínua de partida
         
-        // --- LOOP PRINCIPAL DO JOGO ---
         cliente.enviar("MESA");
-        cliente.esperarMesa(); // Aguarda a foto inicial da mesa
+        cliente.esperarMesa();
         
         while (cliente.conectado()) {
             
-            std::string estado = cliente.obterEstadoMesaLocal();
-            
-            // Antes de pedir o comando, verifique de quem é a vez
-            while (cliente.obterTurnoAtual() != cliente.meuId() && cliente.conectado()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Espera meio segundo e checa de novo
+            // Loop de espera de turno/reação
+            while ((cliente.obterTurnoAtual() != cliente.meuId() || cliente.estaAguardandoOutrosReagirem()) 
+                   && cliente.conectado() 
+                   && !cliente.estaAguardandoNao()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
             }       
-            if (!cliente.conectado()) break; // Sai se a conexão cair enquanto esperava
+            if (!cliente.conectado()) break;
+            
+            // Tratamento de janela do NÃO (Prioridade)
+            if (cliente.estaAguardandoNao()) {
+                std::cout << "\n[REACAO REQUERIDA] Digite 'JOGAR_NAO' ou 'PASSO': > " << std::flush;
+                std::string resp = interface.ler_comando_jogo();
 
-            // Só desenha a mesa e pede a ação se for o turno dele
-            interface.mostrar_mesa(estado, false);
-            std::string acao = interface.ler_comando_jogo();
-            if (acao != "MESA" && acao != "SAIR" && acao != "DESCARTE" && !acao.empty()) {
-                cliente.setTurnoAtual(-1); 
+                if (resp == "JOGAR_NAO") {
+                    cliente.enviar("JOGAR_NAO");
+                } else {
+                    cliente.enviar("PASSO");
+                }
+                
+                cliente.setAguardandoNao(false);
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                continue; 
             }
-
+            
+            // Ações do turno local
+            std::string acao = interface.ler_comando_jogo();
+            
             if (acao == "SAIR") {
                 break;
             } else if (acao == "DESCARTE") {
-                // Mostra a mesa forçando a exibição do descarte (não interage com a rede)
+                std::string estado = cliente.obterEstadoMesaLocal();
                 interface.mostrar_mesa(estado, true);
                 continue; 
-            } else if(acao=="MESA"){
+            } else if (acao == "MESA") {
                 cliente.enviar("MESA");
                 cliente.esperarMesa();
-            
-            }else if (!acao.empty()) {
-                cliente.enviar(acao); // Envia o comando (ex: JOGAR 0)
-                
-                // Em vez de sleep, pede a mesa atualizada e aguarda de forma segura
+            } else if (!acao.empty()) {
+                cliente.enviar(acao); 
                 cliente.enviar("MESA");
                 cliente.esperarMesa(); 
             }
         }
         
+        emPartida = false;
     } else if (!cliente.conectado()) {
         interface.mostrar_conexao_perdida();
     }

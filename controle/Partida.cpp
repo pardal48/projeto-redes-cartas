@@ -78,6 +78,7 @@ void Partida::iniciar(ServidorTCP& servidor) {
 
     servidor.broadcast("JOGO_INICIADO\n");
     servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");
+    notificarTodosMesa(servidor);
 }
 
 // Roteador de Comandos
@@ -148,12 +149,15 @@ void Partida::passarTurno(ServidorTCP& servidor) {
         turnosPendentes = 1;
     }
     servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");
+    notificarTodosMesa(servidor);
 }
 
 void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor) {
+    if(!aguardandoReacao) return;
     int id = cliente.jogador.getId();
-    if (pendentesRespostaNao.find(id) == pendentesRespostaNao.end()) {
-        servidor.enviarTudo(cliente.socket, "ERRO RESPOSTA_JA_REGISTRADA\n");
+    idAutorUltimaCarta = id;
+    if (filaRespostaNao.front() != id) {
+        servidor.enviarTudo(cliente.socket, "ERRO NAO_E_SUA_VEZ_DE_REAGIR\n");
         return;
     }
 
@@ -174,11 +178,17 @@ void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, Se
             servidor.broadcast("JOGOU_NAO " + std::to_string(id) + "\n");
             
             // Novo ciclo: quando um "NÃO" é jogado, todos precisam responder novamente para ver se jogam outro "NÃO"
-            pendentesRespostaNao.clear();
-            for (int id : ordemTurnos) {
-                pendentesRespostaNao.insert(id);
+            filaRespostaNao.clear();
+            for (int idAtivo : ordemTurnos) {
+                if (idAtivo != id) {
+                    filaRespostaNao.push_back(idAtivo);
+                } 
             }
-            servidor.broadcast("PERGUNTA_NAO " + std::to_string(id) + " NAO\n");
+            if (filaRespostaNao.empty()) {
+                aplicarEfeitosPendentes(servidor);
+            } else {
+                servidor.broadcast("PERGUNTA_NAO " + std::to_string(id) + " NAO\n");
+            }
             return;
         } else {
             servidor.enviarTudo(cliente.socket, "ERRO VOCE_NAO_TEM_A_CARTA_NAO\n");
@@ -187,16 +197,24 @@ void Partida::processarRespostaNao(ClienteConectado& cliente, bool querJogar, Se
     }
     
     // Registra a passagem/resposta do jogador
-    pendentesRespostaNao.erase(id);
+    filaRespostaNao.pop_front();
     
     // Se todos responderam, resolve a pilha na thread principal
-    if (pendentesRespostaNao.empty()) {
+    if (filaRespostaNao.empty()) {
         aplicarEfeitosPendentes(servidor);
+    }else {
+        // Pergunta para o próximo jogador da fila
+        int idAutorAtual = pilhaEfeitos.empty() ? -1 : 1; // Ou o ID de quem jogou a última carta
+        auto alvo = obterJogadorPorId(filaRespostaNao.front());
+        if (alvo) {
+            servidor.enviarTudo(alvo->socket, "PERGUNTA_NAO " + std::to_string(idAutorAtual) + " CARTA\n");
+        }
     }
 }
 
 void Partida::jogarCarta(ClienteConectado& cliente, int indiceCarta, int /*idAlvo*/, ServidorTCP& servidor) {
     //auto mao = cliente.jogador.getMao();
+    idAutorUltimaCarta = cliente.jogador.getId();
     if (indiceCarta < 0 || static_cast<size_t>(indiceCarta) >= cliente.jogador.getTamanhoMao()) {
         servidor.enviarTudo(cliente.socket, "ERRO INDICE_INVALIDO\n");
         return;
@@ -214,24 +232,36 @@ void Partida::jogarCarta(ClienteConectado& cliente, int indiceCarta, int /*idAlv
     //aqui da pra tirar o if do se não for desarme bomba ou nao
     // Se não for uma carta de reação instantânea, aguarda o timer do NÃO[cite: 9]
     if (tipo != TipoCarta::Desarme && tipo != TipoCarta::Bomba  && tipo != TipoCarta::Nao) {
-        aguardandoReacao = true;
+        int idQuemJogou=cliente.jogador.getId();
+        
         std::string nomeCarta =(*cartaJogada).getNome();
         pilhaEfeitos.push_back(std::move(cartaJogada));
-        pendentesRespostaNao.clear();
+        servidor.broadcast("JOGOU " + std::to_string(cliente.jogador.getId()) + " " + nomeCarta+ "\n");
+        aguardandoReacao = true;
+        filaRespostaNao.clear();
 
         // Solicita resposta de TODOS os jogadores vivos para não revelar a mão de ninguém
-        for (int id : ordemTurnos) {
-            pendentesRespostaNao.insert(id);
+        for (int idAtivo : ordemTurnos) {
+            if(idAtivo != idQuemJogou) filaRespostaNao.push_back(idAtivo);//não coloca que jogou a carta com efeito
         }
         
-        servidor.broadcast("JOGOU " + std::to_string(cliente.jogador.getId()) + " " + nomeCarta+ "\n");
-        servidor.broadcast("PERGUNTA_NAO " + std::to_string(cliente.jogador.getId()) + " " + nomeCarta+ "\n");
+    
+        // Em jogarCarta, altere o bloco final if (!filaRespostaNao.empty()):
+        if (!filaRespostaNao.empty()) {
+            auto alvo = obterJogadorPorId(filaRespostaNao.front());
+            if (alvo) {
+            servidor.enviarTudo(alvo->socket, "PERGUNTA_NAO " + std::to_string(idQuemJogou) + " " + nomeCarta + "\n");
+            }
+        } else {
+            aplicarEfeitosPendentes(servidor);
+        }
     }
 }
 
 void Partida::aplicarEfeitosPendentes(ServidorTCP& servidor) {
     
     if (!aguardandoReacao || pilhaEfeitos.empty()) return;
+    //numero par de NAOs cancela acao original
     bool cancelado = (pilhaEfeitos.size() % 2 == 0);
     std::string nomeAcaoOriginal = pilhaEfeitos.front()->getNome();
     
@@ -246,6 +276,8 @@ void Partida::aplicarEfeitosPendentes(ServidorTCP& servidor) {
     
     if (cancelado) {
         servidor.broadcast("CANCELADO\n");
+        servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");
+        notificarTodosMesa(servidor);
         return;
     }
     
@@ -257,14 +289,19 @@ void Partida::aplicarEfeitosPendentes(ServidorTCP& servidor) {
     } 
     else if (nomeAcaoOriginal == "PULAR") {
         turnosPendentes--;
-        if (turnosPendentes <= 0) passarTurno(servidor);
-    }
+        if (turnosPendentes <= 0){
+            passarTurno(servidor);
+        }else {servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");}
+    
+    }       
     else if (nomeAcaoOriginal == "EMBARALHAR") {
         auto rng = std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count());
         std::shuffle(baralho.begin(), baralho.end(), rng);
         servidor.broadcast("EMBARALHOU\n");
+        servidor.broadcast("TURNO " + std::to_string(ordemTurnos.front()) + "\n");// sempre usar pra carta que não acaba o turno
         
     }
+    notificarTodosMesa(servidor);
 }
 
 // Ação de comprar carta[cite: 8]
@@ -274,11 +311,12 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
     auto carta = std::move(baralho.back());
     baralho.pop_back();
     bool sobreviveu = true;
+
     if (carta->getTipo() == TipoCarta::Bomba) {
         servidor.broadcast("EXPLOSAO " + std::to_string(cliente.jogador.getId()) + "\n");
         
         bool defusou = false;
-        int idxDefuse=-1;
+        int idxDefuse = -1;
         const auto& mao = cliente.jogador.getMao();
         for (size_t i = 0; i < mao.size(); ++i) {
             if (mao[i]->getTipo() == TipoCarta::Desarme) {
@@ -286,7 +324,7 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
                 break;
             }
         }
-        // 2. Se achou, remove e transfere a posse do unique_ptr com removerCartaMao
+
         if (idxDefuse != -1) {
             auto defuseUsado = cliente.jogador.removerCartaMao(idxDefuse);
             pilhaDescarte.push_back(std::move(defuseUsado));
@@ -294,25 +332,29 @@ void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
         }
 
         if (defusou) {
-            // Em uma interface CLI real, o jogador escolheria o local. 
-            // Para simplificar, colocamos a bomba em uma posição aleatória do baralho[cite: 8]
             auto rng = std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count());
             std::uniform_int_distribution<int> dist(0, baralho.size());
             baralho.insert(baralho.begin() + dist(rng), std::move(carta));
             servidor.broadcast("DEFUSOU " + std::to_string(cliente.jogador.getId()) + "\n");
         } else {
             removerJogador(cliente.jogador.getId(), false, servidor);
-            sobreviveu=false;
+            sobreviveu = false;
         }
     } else {
         std::string nomeCarta = (*carta).getNome();
         cliente.jogador.adicionarCartaMao(std::move(carta));
-        servidor.enviarTudo(cliente.socket, "COMPROU " + nomeCarta + "\n");
+        
+        // CORREÇÃO: Notifica a todos QUE o jogador comprou, e avisa em privado a carta comprada
+        servidor.enviarTudo(cliente.socket, "COMPROU_VOCE " + nomeCarta + "\n");
+        servidor.broadcast("COMPROU " + std::to_string(cliente.jogador.getId()) + "\n");
     }
 
     if (emAndamento && sobreviveu) {
         passarTurno(servidor);
     }
+    
+    // Atualiza a mesa de todos os jogadores vivos
+    notificarTodosMesa(servidor);
 }
 
 std::shared_ptr<ClienteConectado> Partida::obterJogadorPorId(int id) {
@@ -323,31 +365,42 @@ std::shared_ptr<ClienteConectado> Partida::obterJogadorPorId(int id) {
 }
 
 void Partida::removerJogador(int idCliente, bool desconexao, ServidorTCP& servidor) {
-    // 1. Procura o ID diretamente na ordemTurnos (já que agora ela guarda IDs)
     auto it = std::find(ordemTurnos.begin(), ordemTurnos.end(), idCliente);
 
     if (it != ordemTurnos.end()) {
         ordemTurnos.erase(it);
         numeroJogadoresVivos--;
-        // Se o jogador estava pendente de responder ao NÃO, remove-o da lista de espera
-        pendentesRespostaNao.erase(idCliente);
-        if (aguardandoReacao && pendentesRespostaNao.empty()) {
-            aplicarEfeitosPendentes(servidor);
+
+        // TRATAMENTO DA FILA SEQUENCIAL DO "NÃO"
+        if (aguardandoReacao) {
+            bool eraOPrimeiro = (!filaRespostaNao.empty() && filaRespostaNao.front() == idCliente);
+
+            auto fit = std::find(filaRespostaNao.begin(), filaRespostaNao.end(), idCliente);
+            if (fit != filaRespostaNao.end()) {
+                filaRespostaNao.erase(fit);
+            }
+
+            if (filaRespostaNao.empty()) {
+                aplicarEfeitosPendentes(servidor);
+            } 
+            else if (eraOPrimeiro) {
+                std::string nomeCarta = pilhaEfeitos.empty() ? "CARTA" : pilhaEfeitos.back()->getNome();
+                
+                // Usa a variável idAutorUltimaCarta em vez de método da pilha
+                servidor.broadcast("PERGUNTA_NAO " + std::to_string(idAutorUltimaCarta) + " " + nomeCarta + "\n");
+            }
         }
-        // 2. Obtém a referência segura do jogador usando a nossa nova função
+
         auto alvo = obterJogadorPorId(idCliente);
         
-        // 3. Só tenta mexer nas cartas se o jogador ainda for encontrado
         if (alvo != nullptr) {
             if (desconexao) {
-                // Regra: se desconecta vivo, cartas pro baralho e remove defuse e uma bomba
                 while (alvo->jogador.getTamanhoMao() > 0) {
                     auto carta = alvo->jogador.removerCartaMao(0);
                     if (carta->getNome() != "DEFUSE") {
                         baralho.push_back(std::move(carta));
                     }
                 }
-                // Remove aleatoriamente uma bomba para compensar
                 for (auto bit = baralho.begin(); bit != baralho.end(); ++bit) {
                     if ((*bit)->getNome() == "BOMBA") {
                         baralho.erase(bit); 
@@ -357,7 +410,6 @@ void Partida::removerJogador(int idCliente, bool desconexao, ServidorTCP& servid
                 auto rng = std::default_random_engine(std::chrono::system_clock::now().time_since_epoch().count());
                 std::shuffle(baralho.begin(), baralho.end(), rng);
             } else {
-                // Morreu por explosão: move todas as cartas da mão para o descarte
                 while (alvo->jogador.getTamanhoMao() > 0) {
                     pilhaDescarte.push_back(alvo->jogador.removerCartaMao(0));
                 }
@@ -418,3 +470,11 @@ std::string Partida::obterEstadoMesa(const ClienteConectado& cliente) const {
 }
 
 Partida::~Partida() = default;
+
+void Partida::notificarTodosMesa(ServidorTCP& servidor) {
+    for (auto& c : jogadores) {
+        if (c && c->socket >= 0) {
+            servidor.enviarTudo(c->socket, obterEstadoMesa(*c));
+        }
+    }
+}

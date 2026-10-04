@@ -61,7 +61,14 @@ public:
     void esperarMesa();
     int obterTurnoAtual();
     void setTurnoAtual(int t);
+
+    std::atomic<bool> aguardandoNao{false};
+
+    bool estaAguardandoNao() const { return aguardandoNao; }
+    void setAguardandoNao(bool v) { aguardandoNao = v; }
  
+    bool estaAguardandoOutrosReagirem() const;
+    void setAguardandoOutrosReagirem(bool v);
 private:
     void receber();// thread de recepção: lê o socket e atualiza o estado do lobby
     void tratarLinha(const std::string& linha);// processa uma linha recebida do servidor (LOBBY, INICIAR, ERRO, etc.)
@@ -81,6 +88,7 @@ private:
     std::atomic<bool> comecou{false};// true se o servidor enviou a mensagem "INICIAR" (o jogo começou)
     std::string estadoMesaAtual;
     bool mesaAtualizada = false;
+    bool aguardandoMinhaCarta{false};
 
     int turnoAtual = -1;
     

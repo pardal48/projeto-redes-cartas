@@ -250,17 +250,52 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             mesaAtualizada = true; // Avisa a thread principal que a mesa chegou
             
             mudou = true;
+        // Em ClienteTCP_4.cpp (método tratarLinha)
+
         } else if (linha.rfind("TURNO ", 0) == 0) {
             try { turnoAtual = std::stoi(linha.substr(6)); } catch (...) {}
+            
+            
+            aguardandoNao = false;
+            aguardandoMinhaCarta = false; // Reseta os estados ao mudar/confirmar turno
+            mudou=true;
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
-        } else if (linha.rfind("JOGOU", 0) == 0 || linha.rfind("COMPROU", 0) == 0 || linha.rfind("EXPLOSAO", 0) == 0) {
+
+        } else if (linha.rfind("PERGUNTA_NAO ", 0) == 0) {
+            std::stringstream ss(linha);
+            std::string cmd, nomeCarta;
+            int idAutor = -1;
+            ss >> cmd >> idAutor >> nomeCarta;
+
+            
+            if (idAutor != id) {
+                // Carta de OUTRO jogador: VOCÊ precisa responder (JOGAR_NAO ou PASSO)
+                aguardandoNao = true;
+                aguardandoMinhaCarta = false;
+                std::cout << "\n>>> [REACAO REQUERIDA]: Jogador " << idAutor << " jogou " << nomeCarta << "! <<<\n";
+            } else {
+                // SUA carta: Aguarde os outros responderem
+                aguardandoNao = false;
+                aguardandoMinhaCarta = true;
+                std::cout << "\n>>> [SISTEMA]: Carta '" << nomeCarta << "' jogada. Aguardando reacao dos outros... <<<\n";
+            }
+            mudou = true;
+
+        } else if (linha == "CANCELADO") {
+        
+            aguardandoNao = false;
+            aguardandoMinhaCarta = false;
+            std::cout << "\n>>> [SISTEMA]: A acao foi CANCELADA por uma carta NAO! <<<\n";
+        }else if (linha.rfind("JOGOU", 0) == 0 || linha.rfind("COMPROU", 0) == 0 || linha.rfind("EXPLOSAO", 0) == 0) {
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
+            mudou=true;
         }else if (linha.rfind("ERRO", 0) == 0) {
             std::cout << "\n>>> [SISTEMA]: " << linha << " <<<\n";
             // Se for um erro no meio do jogo, devolve o turno para tentar de novo
+            /*
             if (linha != "ERRO NOME_INVALIDO" && linha != "ERRO LOBBY_CHEIO") {
                 turnoAtual = id; 
-            }
+            }*/
         }
     }
     cv.notify_all();//acorda quem está esperando a resposta do servidor (nome aceito ou não)
@@ -294,4 +329,14 @@ int ClienteTCP::obterTurnoAtual() {
 void ClienteTCP::setTurnoAtual(int t) {
     std::lock_guard<std::mutex> lock(mtx);
     turnoAtual = t;
+}
+
+bool ClienteTCP::estaAguardandoOutrosReagirem() const {
+    std::lock_guard<std::mutex> lock(mtx);
+    return aguardandoMinhaCarta;
+}
+
+void ClienteTCP::setAguardandoOutrosReagirem(bool v) {
+    std::lock_guard<std::mutex> lock(mtx);
+    aguardandoMinhaCarta = v;
 }

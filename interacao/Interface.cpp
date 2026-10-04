@@ -127,7 +127,7 @@ void Interface::mostrar_erro(const std::string& mensagem) {
     std::cerr << mensagem << "\n";
 }
 
-void Interface::mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte) {
+void Interface::mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte, bool ehMeuTurno) {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cout << "\n================= MESA DE JOGO =================\n";
     
@@ -146,8 +146,14 @@ void Interface::mostrar_mesa(const std::string& estadoMesa, bool mostrarDescarte
     }
     
     std::cout << "================================================\n";
-    std::cout << "Comandos: COMPRAR | JOGAR <num_carta> | DESCARTE | MESA (atualizar) | SAIR\n";
-    std::cout << "O que deseja fazer? > " << std::flush;
+    
+    // Condiciona o prompt de acordo com o turno do jogador
+    if (ehMeuTurno) {
+        std::cout << "Comandos: COMPRAR | JOGAR <num_carta> | DESCARTE | MESA (atualizar) | SAIR\n";
+        std::cout << "O que deseja fazer? > " << std::flush;
+    } else {
+        std::cout << "A aguardar a jogada dos outros jogadores...\n" << std::flush;
+    }
 }
 
 std::string Interface::ler_comando_jogo() {
