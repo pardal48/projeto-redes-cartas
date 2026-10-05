@@ -11,7 +11,8 @@ enum class TipoCarta {
     Embaralhar,
     Futuro,
     Nao,         // "Nem penses!"
-    GatoAranha, GatoBarba, GatoBatata, GatoMelancia, GatoTaco
+    GatoAranha, GatoBarba, GatoBatata, GatoMelancia, GatoTaco,
+    Combo2, Combo3  // combinações de 2 ou 3 gatos: roubam uma carta do oponente
 };
 
 class Carta {

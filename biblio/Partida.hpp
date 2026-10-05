@@ -49,6 +49,7 @@ private:
     // ---- ações do jogador da vez ----
     void comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor);
     void jogarCarta(ClienteConectado& cliente, int indice, ServidorTCP& servidor);
+    void jogarCombo(ClienteConectado& cliente, std::istringstream& cartas, ServidorTCP& servidor);
 
     // ---- janela de reação (cartas NAO) ----
     void abrirJanelaReacao(ServidorTCP& servidor);

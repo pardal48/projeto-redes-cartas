@@ -153,7 +153,7 @@ std::vector<std::string> Interface::dividirSegmentos(const std::string& estadoMe
 void Interface::imprimirPrompt(ModoJogo modo) {
     switch (modo) {
         case ModoJogo::MinhaVez:
-            std::cout << "Comandos: COMPRAR | JOGAR <num_carta> | DESCARTE | MESA | SAIR\n"
+            std::cout << "Comandos: COMPRAR | JOGAR <num_carta> | COMBO <num_carta> <num_carta> ...> | DESCARTE | MESA | SAIR\n"
                       << "O que deseja fazer? > " << std::flush;
             break;
         case ModoJogo::Reagir:
@@ -167,6 +167,9 @@ void Interface::imprimirPrompt(ModoJogo modo) {
             break;
         case ModoJogo::EscolherCarta:
             std::cout << "Numero da carta a entregar > " << std::flush;
+            break;
+        case ModoJogo::EscolherTipoCarta:
+            std::cout << "Tipo da carta a ser roubada > " << std::flush;
             break;
         case ModoJogo::Aguardar:
             std::cout << "Aguardando a jogada dos outros jogadores...\n" << std::flush;

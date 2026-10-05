@@ -16,7 +16,8 @@ enum class ModoJogo {
     MinhaVez,   // posso COMPRAR / JOGAR
     Eliminado,  // explodi: só assisto
     EscolherAlvo,   // meu FAVOR passou: digitar o nome de quem vai me dar uma carta
-    EscolherCarta   // alguém me pediu um FAVOR: digitar o número da carta a entregar
+    EscolherCarta,   // alguém me pediu um FAVOR: digitar o número da carta a entregar
+    EscolherTipoCarta // combo de 3 cartas: digitar o tipo da carta a ser roubada
 };
 
 // Abre uma conexão TCP; devolve o fd ou -1.
@@ -91,4 +92,5 @@ private:
     bool aguardandoMinhaCarta = false; // joguei uma carta e os outros estão reagindo
     bool escolhendoAlvo = false;       // FAVOR: o servidor espera eu escolher o oponente
     bool escolhendoDoacao = false;     // FAVOR: o servidor espera eu escolher a carta a entregar
+    bool aguardandoEscolhaTipoCarta = false; // combo de 3 cartas: digitar o tipo da carta a ser roubada
 };

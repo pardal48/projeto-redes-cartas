@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
 
             case ModoJogo::MinhaVez:
                 // O servidor valida tudo; aqui só se filtra o que nem faz sentido enviar.
-                if (comando == "COMPRAR" || comando.rfind("JOGAR", 0) == 0) cliente.enviar(comando);
+                if (comando == "COMPRAR" || comando.rfind("JOGAR", 0) == 0 || comando.rfind("COMBO", 0) == 0) cliente.enviar(comando);
                 else {
                     interface.mostrar_erro("Comando invalido.");
                     interface.mostrar_prompt(modo);
@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
 
             case ModoJogo::EscolherAlvo:
             case ModoJogo::EscolherCarta:
-                // Nome do oponente ou número da carta: o servidor valida e responde com erro se preciso.
+            case ModoJogo::EscolherTipoCarta:
                 cliente.enviar(comando);
                 break;
 

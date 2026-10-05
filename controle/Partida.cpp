@@ -28,6 +28,8 @@ std::unique_ptr<Carta> criarCarta(TipoCarta tipo) {
         case TipoCarta::GatoBatata:   return std::make_unique<Carta>(9, "GATO3", "Gato normal", tipo);
         case TipoCarta::GatoMelancia: return std::make_unique<Carta>(10, "GATO4", "Gato normal", tipo);
         case TipoCarta::GatoTaco:     return std::make_unique<Carta>(11, "GATO5", "Gato normal", tipo);
+        case TipoCarta::Combo2:       return std::make_unique<Carta>(12, "COMBO2", "Combo de 2 cartas", tipo);
+        case TipoCarta::Combo3:       return std::make_unique<Carta>(13, "COMBO3", "Combo de 3 cartas", tipo);
     }
     return nullptr;
 }
@@ -42,8 +44,9 @@ const ItemBaralho kBaralhoBase[] = {
 };
 
 // Cartas que só existem como reação / automaticamente: não podem ser "jogadas" no turno.
-bool ehCartaDeReacao(TipoCarta t) {
-    return t == TipoCarta::Desarme || t == TipoCarta::Bomba || t == TipoCarta::Nao;
+bool ehCartaNaoJogavel(TipoCarta t) {
+    return t == TipoCarta::Desarme || t == TipoCarta::Bomba || t == TipoCarta::Nao|| t == TipoCarta::GatoAranha || t == TipoCarta::GatoBarba || t == TipoCarta::GatoBatata ||
+           t == TipoCarta::GatoMelancia || t == TipoCarta::GatoTaco;
 }
 
 // Cartas com efeito já programado. As demais (Favor, Gatos) são recusadas ao jogar,
@@ -143,7 +146,6 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         return;
     }
 
-    // FASE 1: Reação ao NAO (Qualquer um, exceto quem jogou a carta)
     if (aguardandoReacao) {
         std::string acaoUpper = acao;
         std::transform(acaoUpper.begin(), acaoUpper.end(), acaoUpper.begin(), ::toupper);
@@ -151,10 +153,71 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         if (acaoUpper == "JOGAR_NAO")  processarRespostaNao(cliente, true, servidor);
         else if (acaoUpper == "PASSO") processarRespostaNao(cliente, false, servidor);
         else                           enviar(cliente, "ERRO AGUARDANDO_RESPOSTA_NAO\n");
-        return; // Sai imediatamente, não passa pelas validações abaixo
+        return; 
     }
 
-    // FASE 2: Doador escolhendo a carta para entregar (Apenas o alvo do Favor)
+    if(aguardandoEscolhaTipoCarta){
+        if (cliente.jogador.getId() != ordemTurnos.front()) {
+            enviar(cliente, "ERRO NAO_E_SEU_TURNO\n");
+            return;
+        }
+
+        std::string tipoCartaStr = minusculo(acao);
+        TipoCarta tipoEscolhido;
+        if(tipoCartaStr == "favor"){
+            tipoEscolhido = TipoCarta::Favor;
+        }else if(tipoCartaStr == "ataque"){
+            tipoEscolhido = TipoCarta::Ataque;
+        }else if(tipoCartaStr == "pular"){
+            tipoEscolhido = TipoCarta::Pular;
+        }else if(tipoCartaStr == "embaralhar"){
+            tipoEscolhido = TipoCarta::Embaralhar;
+        }else if(tipoCartaStr == "futuro"){ 
+            tipoEscolhido = TipoCarta::Futuro;
+        }else if(tipoCartaStr == "gato1"){
+            tipoEscolhido = TipoCarta::GatoAranha;
+        }else if(tipoCartaStr == "gato2"){
+            tipoEscolhido = TipoCarta::GatoBarba;
+        }else if(tipoCartaStr == "gato3"){
+            tipoEscolhido = TipoCarta::GatoBatata; 
+        }else if(tipoCartaStr == "gato4"){
+            tipoEscolhido = TipoCarta::GatoMelancia;
+        }else if(tipoCartaStr == "gato5"){
+            tipoEscolhido = TipoCarta::GatoTaco;
+        }else if(tipoCartaStr == "nao"){
+            tipoEscolhido = TipoCarta::Nao;
+        }else if(tipoCartaStr == "defuse"){
+            tipoEscolhido = TipoCarta::Desarme;
+        }else{
+            enviar(cliente, "ERRO TIPO_INVALIDO\n");
+            return;
+        }
+        auto origem = obterJogadorPorId(idJogadorDoador);
+        auto destino = obterJogadorPorId(cliente.jogador.getId()); 
+
+        if (origem && destino) {
+            int indice = indiceDoTipo(origem->jogador.getMao(), tipoEscolhido);
+            if (indice == -1) {
+                enviar(cliente, "ERRO NAO_TEM_CARTA_DO_TIPO\n");
+
+                aguardandoEscolhaTipoCarta = false;
+                idJogadorDoador = -1;
+                anunciarTurno(servidor);
+                return;
+            }
+
+            const std::string nomeCarta = origem->jogador.getMao()[static_cast<size_t>(indice)]->getNome();
+            transferirCarta(indice, origem, destino);
+            aguardandoEscolhaTipoCarta = false;
+            idJogadorDoador = -1;
+
+
+            enviar(*origem, "CARTA_DOADA\n");
+            enviar(cliente, "RECEBEU " + origem->jogador.getNome() + " " + nomeCarta + "\n");
+            anunciarTurno(servidor);
+        }
+        return;
+    }
     if (aguardandoEscolhaCarta) {
         if (cliente.jogador.getId() != idJogadorDoador) {
             enviar(cliente, "ERRO AGUARDANDO_DOACAO_DE_CARTA\n");
@@ -190,7 +253,7 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         return;
     }
 
-    // FASE 3: Autor do Favor escolhendo o oponente alvo
+
     if (aguardandoEscolhaOponente) {
         // VERIFICAÇÃO DO AUTOR: Apenas quem jogou o Favor (o dono do turno) pode escolher o alvo
         if (cliente.jogador.getId() != ordemTurnos.front()) {
@@ -212,8 +275,22 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
                 }
                 aguardandoEscolhaOponente = false;
                 idJogadorDoador = alvo->jogador.getId();
-                servidor.broadcast("FAVOR " + std::to_string(cliente.jogador.getId()) + " " +
+                switch(tipoDoacao){
+                    case tipoDoacao::Favor:
+                        servidor.broadcast("FAVOR " + std::to_string(cliente.jogador.getId()) + " " +
                                    std::to_string(idJogadorDoador) + "\n");
+                        break;
+                    case tipoDoacao::combo2:
+                        servidor.broadcast("COMBO2 " + std::to_string(cliente.jogador.getId()) + " " +
+                                   std::to_string(idJogadorDoador) + "\n");
+                        break;
+                    case tipoDoacao::combo3:
+                        servidor.broadcast("COMBO3 " + std::to_string(cliente.jogador.getId()) + " " +
+                                   std::to_string(idJogadorDoador) + "\n");
+                        break;
+                    default:
+                        break;
+                }
                 processarRoubarCarta(alvo, servidor);
                 return;
             }
@@ -222,8 +299,7 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         return;
     }
 
-    // FASE 4: Validação de Turno normal (Comprar ou Jogar carta)
-    // Se o jogo não está esperando Favor ou Reação, valida se é o turno do jogador
+
     if (ordemTurnos.empty() || ordemTurnos.front() != cliente.jogador.getId()) {
         enviar(cliente, "ERRO NAO_E_SEU_TURNO\n");
         return;
@@ -238,6 +314,9 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
             return;
         }
         jogarCarta(cliente, indice, servidor);
+    } else if (acao == "COMBO"){
+        std::istringstream iss2(comando.substr(5)); // Remove "COMBO " do início
+        jogarCombo(cliente, iss2, servidor);
     } else {
         enviar(cliente, "ERRO COMANDO_INVALIDO\n");
     }
@@ -267,9 +346,7 @@ void Partida::consumirTurno() {
     if (--turnosPendentes <= 0) passarParaProximo();
 }
 
-// =====================================================================
-// Comprar (fim do turno) e explosão
-// =====================================================================
+
 
 void Partida::comprarCarta(ClienteConectado& cliente, ServidorTCP& servidor) {
     const int id = cliente.jogador.getId();
@@ -327,8 +404,8 @@ void Partida::jogarCarta(ClienteConectado& cliente, int indice, ServidorTCP& ser
     }
 
     const TipoCarta tipo = mao[static_cast<size_t>(indice)]->getTipo();
-    if (ehCartaDeReacao(tipo)) {
-        enviar(cliente, "ERRO CARTA_DE_REACAO_NAO_PODE_SER_JOGADA_ASSIM\n");
+    if (ehCartaNaoJogavel(tipo)) {
+        enviar(cliente, "ERRO CARTA_NAO_PODE_SER_JOGADA_ASSIM\n");
         return;
     }
     if (!efeitoImplementado(tipo)) {
@@ -344,7 +421,66 @@ void Partida::jogarCarta(ClienteConectado& cliente, int indice, ServidorTCP& ser
     servidor.broadcast("JOGOU " + std::to_string(idUltimoAutor) + " " + nome + "\n");
     abrirJanelaReacao(servidor);
 }
+void Partida::jogarCombo(ClienteConectado& cliente, std::istringstream& input, ServidorTCP& servidor) {
+    const auto& mao = cliente.jogador.getMao();
+    std::vector<int> indices;
+    int idxEntrada;
+    
+    while (input >> idxEntrada) {
+        if (idxEntrada < 0 || static_cast<size_t>(idxEntrada) >= mao.size()) {
+            enviar(cliente, "ERRO INDICE_INVALIDO\n");
+            return;
+        }
+        indices.push_back(idxEntrada);
+    }
+    std::vector<int> indicesOrdenados = indices;
+    std::sort(indicesOrdenados.begin(), indicesOrdenados.end());
+    for (size_t i = 1; i < indicesOrdenados.size(); ++i) {
+        if (indicesOrdenados[i] == indicesOrdenados[i - 1]) {
+            enviar(cliente, "ERRO INDICE_INVALIDO\n");
+            return;
+        }
+    }
+    if (indices.size() < 2 || indices.size() > 3) {
+        enviar(cliente, "ERRO COMBO_INVALIDO\n");
+        return;
+    }
 
+    // Valida se todas as cartas do combo são do mesmo tipo
+    const TipoCarta tipo = mao[static_cast<size_t>(indices[0])]->getTipo();
+    for (size_t i = 0; i < indices.size(); ++i) {
+        if (mao[static_cast<size_t>(indices[i])]->getTipo() != tipo) {
+            enviar(cliente, "ERRO CARTAS_NAO_SAO_DO_MESMO_TIPO\n");
+            return;
+        }
+    }
+
+    idUltimoAutor = cliente.jogador.getId();
+    servidor.broadcast(std::to_string(idUltimoAutor) + " JOGOU COMBO DE");
+
+    for (size_t i = 0; i < indices.size(); ++i) {
+        auto carta = cliente.jogador.removerCartaMao(static_cast<size_t>(indices[i]));
+        const std::string nome = carta->getNome();
+        
+ 
+        pilhaDescarte.push_back(std::move(carta));
+        servidor.broadcast(" " + nome);
+    }
+    servidor.broadcast("\n");
+
+    switch (indices.size()) {
+        case 2:
+            pilhaEfeitos.push_back(criarCarta(TipoCarta::Combo2));
+            break;
+        case 3:
+            pilhaEfeitos.push_back(criarCarta(TipoCarta::Combo3));
+            break;
+        default:
+            break;
+    }
+
+    abrirJanelaReacao(servidor);
+}
 // Todos os outros jogadores vivos podem responder, um de cada vez (ninguém vê a mão de ninguém).
 void Partida::abrirJanelaReacao(ServidorTCP& servidor) {
     aguardandoReacao = true;
@@ -447,7 +583,6 @@ void Partida::aplicarEfeito(TipoCarta tipo, ServidorTCP& servidor) {
         }
         
         case TipoCarta::Favor: {
-            // Se ninguém tem carta para dar, o Favor não tem efeito (evita travar o autor).
             bool alguemTemCarta = false;
             for (int id : ordemTurnos)
                 if (id != ordemTurnos.front()) {
@@ -456,19 +591,56 @@ void Partida::aplicarEfeito(TipoCarta tipo, ServidorTCP& servidor) {
                 }
             if (!alguemTemCarta) {
                 servidor.broadcast("FAVOR_SEM_EFEITO\n");
-                break;  // cai no anunciarTurno() do fim da função
+                break;  
             }
 
             aguardandoEscolhaOponente = true;
             tipoDoacao = tipoDoacao::Favor;
 
-            // O dono do turno é obrigatoriamente o autor da carta original.
             if (auto autor = obterJogadorPorId(ordemTurnos.front()))
-                enviar(*autor, "ESCOLHER_ALVO\n");
-            return;  // não anuncia o turno: o jogo espera a escolha do alvo e da carta
+                enviar(*autor, "ESCOLHER_ALVO FAVOR\n");
+            return;  
+        }
+        case TipoCarta::Combo2: {
+            bool alguemTemCarta = false;
+            for (int id : ordemTurnos)
+                if (id != ordemTurnos.front()) {
+                    auto o = obterJogadorPorId(id);
+                    if (o && o->jogador.getTamanhoMao() > 0) { alguemTemCarta = true; break; }
+                }
+            if (!alguemTemCarta) {
+                servidor.broadcast("COMBO_SEM_EFEITO\n");
+                break;  
+            }
+
+            aguardandoEscolhaOponente = true;
+            tipoDoacao = tipoDoacao::combo2;
+
+            if (auto autor = obterJogadorPorId(ordemTurnos.front()))
+                enviar(*autor, "ESCOLHER_ALVO COMBO2\n");
+            return;  
+        }
+        case TipoCarta::Combo3: {
+            bool alguemTemCarta = false;
+            for (int id : ordemTurnos)
+                if (id != ordemTurnos.front()) {
+                    auto o = obterJogadorPorId(id);
+                    if (o && o->jogador.getTamanhoMao() > 0) { alguemTemCarta = true; break; }
+                }
+            if (!alguemTemCarta) {
+                servidor.broadcast("COMBO_SEM_EFEITO\n");
+                break;  
+            }
+
+            aguardandoEscolhaOponente = true;
+            tipoDoacao = tipoDoacao::combo3;
+
+            if (auto autor = obterJogadorPorId(ordemTurnos.front()))
+                enviar(*autor, "ESCOLHER_ALVO COMBO3\n");
+            return;  
         }
         default:
-            break;  // não chega aqui: jogarCarta recusa cartas sem efeito implementado
+            break;  
     }
     anunciarTurno(servidor);
 }
@@ -478,8 +650,10 @@ void Partida::transferirCarta(int posicaoCarta, std::shared_ptr<ClienteConectado
 }
 
 void Partida::processarRoubarCarta(std::shared_ptr<ClienteConectado> alvo, ServidorTCP& servidor) {
-    auto autor = obterJogadorPorId(ordemTurnos.front()); // O autor é o dono do turno atual
-    
+    if (!alvo) return;
+    auto autor = obterJogadorPorId(ordemTurnos.front());
+    if (!autor) return;
+
     switch (tipoDoacao) {
         case tipoDoacao::Favor: {
             aguardandoEscolhaCarta = true;
@@ -487,17 +661,27 @@ void Partida::processarRoubarCarta(std::shared_ptr<ClienteConectado> alvo, Servi
             break;
         }
         case tipoDoacao::combo2: {
-            if (alvo->jogador.getTamanhoMao() > 0) {
-                std::uniform_int_distribution<size_t> dist(0, alvo->jogador.getTamanhoMao() - 1);
-                const size_t idx = dist(rng);
-                transferirCarta(idx, alvo, autor);
+            if (alvo->jogador.getTamanhoMao() == 0) {
+                anunciarTurno(servidor);
+                break;
             }
+            std::uniform_int_distribution<size_t> dist(0, alvo->jogador.getTamanhoMao() - 1);
+            const size_t idx = dist(rng);
+            transferirCarta(static_cast<int>(idx), alvo, autor);
+
+            std::string nomeCarta = "uma carta";
+            if (!autor->jogador.getMao().empty()) {
+                nomeCarta = autor->jogador.getMao().back()->getNome();
+            }
+
+            enviar(*alvo, "CARTA_DOADA\n");
+            enviar(*autor, "RECEBEU " + alvo->jogador.getNome() + " " + nomeCarta + "\n");
             anunciarTurno(servidor);
             break;
         }
         case tipoDoacao::combo3: {
             aguardandoEscolhaTipoCarta = true;
-            if (autor) enviar(*autor, "ESCOLHA O TIPO DE CARTA PARA ROUBAR\n");
+            if (autor) enviar(*autor, "ESCOLHA_TIPO_CARTA\n");
             break;
         }
         default:
@@ -506,7 +690,8 @@ void Partida::processarRoubarCarta(std::shared_ptr<ClienteConectado> alvo, Servi
     tipoDoacao = tipoDoacao::nothing;
 }
 void Partida::descartarEfeitosPendentes() {
-    for (auto& c : pilhaEfeitos) pilhaDescarte.push_back(std::move(c));
+    for (auto& c : pilhaEfeitos)
+        if(c->getTipo() != TipoCarta::Combo2 && c->getTipo() != TipoCarta::Combo3) pilhaDescarte.push_back(std::move(c));
     pilhaEfeitos.clear();
     filaRespostaNao.clear();
     aguardandoReacao = false;

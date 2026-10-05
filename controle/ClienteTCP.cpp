@@ -116,6 +116,7 @@ ModoJogo ClienteTCP::modoAtual() const {
     if (aguardandoNao) return ModoJogo::Reagir;
     if (escolhendoAlvo) return ModoJogo::EscolherAlvo;
     if (escolhendoDoacao) return ModoJogo::EscolherCarta;
+    if (aguardandoEscolhaTipoCarta) return ModoJogo::EscolherTipoCarta;
     if (turnoAtual == id && !aguardandoMinhaCarta) return ModoJogo::MinhaVez;
     return ModoJogo::Aguardar;
 }
@@ -170,7 +171,7 @@ namespace {
 std::string traduzirErro(const std::string& codigo) {
     if (codigo == "NAO_E_SEU_TURNO")                          return "Nao e a sua vez.";
     if (codigo == "INDICE_INVALIDO")                          return "Numero de carta invalido.";
-    if (codigo == "CARTA_DE_REACAO_NAO_PODE_SER_JOGADA_ASSIM") return "Essa carta so e usada como reacao.";
+    if (codigo == "CARTA_NAO_PODE_SER_JOGADA_ASSIM") return "Essa carta nao pode ser jogada assim.";
     if (codigo == "CARTA_NAO_IMPLEMENTADA")                   return "Essa carta ainda nao foi implementada.";
     if (codigo == "AGUARDANDO_RESPOSTA_NAO")                  return "Aguarde: os outros jogadores estao reagindo.";
     if (codigo == "VOCE_NAO_TEM_A_CARTA_NAO")                 return "Voce nao tem a carta NAO.";
@@ -180,6 +181,10 @@ std::string traduzirErro(const std::string& codigo) {
     if (codigo == "APENAS_O_AUTOR_PODE_ESCOLHER_O_ALVO")      return "Aguarde: o autor do FAVOR esta escolhendo o alvo.";
     if (codigo == "AGUARDANDO_DOACAO_DE_CARTA")               return "Aguarde: o jogador esta escolhendo a carta a entregar.";
     if (codigo == "NAO_E_SUA_VEZ_DE_REAGIR")                  return "Nao e a sua vez de reagir.";
+    if (codigo == "CARTAS_NAO_SAO_DO_MESMO_TIPO")             return "Combos so podem ser formados com cartas do mesmo tipo.";
+    if (codigo == "COMBO_INVALIDO")                           return "Combos so podem ser formados por duas ou tres cartas.";
+    if (codigo == "NAO_TEM_CARTA_DO_TIPO")                    return "O jogardor alvo nao tem a carta do tipo escolhido.";
+    if (codigo == "TIPO_INVALIDO")                            return "Escolha um tipo valido.";
     if (codigo == "VOCE_ESTA_ELIMINADO")                      return "Voce foi eliminado.";
     if (codigo == "COMANDO_INVALIDO" || codigo == "COMANDO_INVALIDO_USE_NUMEROS")
                                                               return "Comando invalido.";
@@ -248,6 +253,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             aguardandoMinhaCarta = false;
             escolhendoAlvo = false;
             escolhendoDoacao = false;
+            aguardandoEscolhaTipoCarta = false;
 
         } else if (cmd == "MESA_ESTADO") {
             estadoMesa = linha.size() > 12 ? linha.substr(12) : "";
@@ -278,13 +284,21 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             evento = (autor == id ? std::string("Voce") : nomeDe(autor)) + " jogou NAO!";
 
         } else if (cmd == "ESCOLHER_ALVO") {
-            // Meu FAVOR passou sem NAO: agora eu digito o nome do oponente.
+            std::string tipoContexto;
+            iss >> tipoContexto; // Reads FAVOR, COMBO2, COMBO3 (or stays empty safely)
+            
             escolhendoAlvo = true;
             aguardandoMinhaCarta = false;
-            evento = "[FAVOR] Digite o nome do jogador que vai te dar uma carta.";
 
-        } else if (cmd == "FAVOR") {
-            // "FAVOR <autor> <alvo>": o autor escolheu de quem vai pedir.
+            if (tipoContexto == "COMBO2") {
+                evento = "[COMBO] Digite o nome do jogador de quem deseja roubar uma carta aleatoria.";
+            } else if (tipoContexto == "COMBO3") {
+                evento = "[COMBO] Digite o nome do jogador de quem deseja roubar uma carta.";
+            } else {
+                evento = "[FAVOR] Digite o nome do jogador que vai te dar uma carta.";
+            }
+        } else if (cmd == "FAVOR" || cmd == "COMBO2" || cmd == "COMBO3") {
+            
             int autor = -1, alvo = -1;
             iss >> autor >> alvo;
             if (autor == id) {
@@ -299,7 +313,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             evento = "O FAVOR nao teve efeito: ninguem tem cartas para dar.";
 
         } else if (cmd == "ESCOLHER_CARTA") {
-            // "ESCOLHER_CARTA <autor>": eu sou o alvo e preciso entregar uma carta.
+            
             int autor = -1;
             iss >> autor;
             escolhendoDoacao = true;
@@ -309,7 +323,11 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             escolhendoDoacao = false;
             evento = "Voce entregou a carta.";
 
-        } else if (cmd == "RECEBEU") {
+        }else if (cmd == "ESCOLHA_TIPO_CARTA") {
+            aguardandoEscolhaTipoCarta = true;
+            evento = "[COMBO3] Digite o tipo da carta que deseja roubar";
+
+        }  else if (cmd == "RECEBEU") {
             // "RECEBEU <nome> <carta>"
             std::string de, carta;
             iss >> de >> carta;
