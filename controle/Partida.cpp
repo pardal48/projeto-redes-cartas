@@ -458,8 +458,8 @@ void Partida::jogarCombo(ClienteConectado& cliente, std::istringstream& input, S
     idUltimoAutor = cliente.jogador.getId();
     servidor.broadcast(std::to_string(idUltimoAutor) + " JOGOU COMBO DE");
 
-    for (size_t i = 0; i < indices.size(); ++i) {
-        auto carta = cliente.jogador.removerCartaMao(static_cast<size_t>(indices[i]));
+    for (size_t i = indices.size(); i > 0; --i) {
+        auto carta = cliente.jogador.removerCartaMao(static_cast<size_t>(indices[i - 1]));
         const std::string nome = carta->getNome();
         
  
