@@ -247,13 +247,15 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
 
         } else if (cmd == "TURNO") {
             int t;
-            if (iss >> t) turnoAtual = t;
-            // Um novo turno encerra qualquer reação ou escolha de FAVOR pendente.
-            aguardandoNao = false;
-            aguardandoMinhaCarta = false;
-            escolhendoAlvo = false;
-            escolhendoDoacao = false;
-            aguardandoEscolhaTipoCarta = false;
+            if (iss >> t) {
+                turnoAtual = t;
+                aguardandoNao = false;
+                aguardandoMinhaCarta = false;
+                escolhendoAlvo = false;
+                escolhendoDoacao = false;
+                aguardandoEscolhaTipoCarta = false;
+            }
+            
 
         } else if (cmd == "MESA_ESTADO") {
             estadoMesa = linha.size() > 12 ? linha.substr(12) : "";
@@ -289,6 +291,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             
             escolhendoAlvo = true;
             aguardandoMinhaCarta = false;
+            aguardandoEscolhaTipoCarta = false;
 
             if (tipoContexto == "COMBO2") {
                 evento = "[COMBO] Digite o nome do jogador de quem deseja roubar uma carta aleatoria.";
@@ -310,7 +313,8 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
 
         } else if (cmd == "FAVOR_SEM_EFEITO") {
             aguardandoMinhaCarta = false;
-            evento = "O FAVOR nao teve efeito: ninguem tem cartas para dar.";
+            aguardandoEscolhaTipoCarta = false;
+            evento = "O FAVOR nao teve efeito: ninguem tem cartas para dar ou o alvo saiu da partida.";
 
         } else if (cmd == "ESCOLHER_CARTA") {
             
@@ -332,6 +336,8 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             std::string de, carta;
             iss >> de >> carta;
             evento = "Voce recebeu " + carta + " de " + de + ".";
+            aguardandoMinhaCarta = false;
+            aguardandoEscolhaTipoCarta = false;
 
         } else if (cmd == "CANCELADO") {
             aguardandoNao = false;

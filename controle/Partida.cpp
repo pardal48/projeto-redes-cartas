@@ -202,6 +202,7 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
 
                 aguardandoEscolhaTipoCarta = false;
                 idJogadorDoador = -1;
+                servidor.broadcast("FAVOR_SEM_EFEITO\n");
                 anunciarTurno(servidor);
                 return;
             }
@@ -458,8 +459,8 @@ void Partida::jogarCombo(ClienteConectado& cliente, std::istringstream& input, S
     idUltimoAutor = cliente.jogador.getId();
     servidor.broadcast(std::to_string(idUltimoAutor) + " JOGOU COMBO DE");
 
-    for (size_t i = indices.size(); i > 0; --i) {
-        auto carta = cliente.jogador.removerCartaMao(static_cast<size_t>(indices[i - 1]));
+    for (auto it = indicesOrdenados.rbegin(); it != indicesOrdenados.rend(); ++it) {
+        auto carta = cliente.jogador.removerCartaMao(static_cast<size_t>(*it));
         const std::string nome = carta->getNome();
         
  
@@ -687,7 +688,6 @@ void Partida::processarRoubarCarta(std::shared_ptr<ClienteConectado> alvo, Servi
         default:
             break;
     }
-    tipoDoacao = tipoDoacao::nothing;
 }
 void Partida::descartarEfeitosPendentes() {
     for (auto& c : pilhaEfeitos)
@@ -728,25 +728,60 @@ void Partida::eliminarJogador(int idJogador, Motivo motivo, ServidorTCP& servido
     if (verificarFimDeJogo(servidor)) return;
 
     if (eraDaVez) {
-        // A vez passa para quem já está em front(). Cancela qualquer reação pendente
-        // e zera os turnos pendentes (senão o próximo herdaria os turnos de um ataque).
         descartarEfeitosPendentes();
         turnosPendentes = 1;
+        // Como o autor da vez morreu/desconectou, cancelamos a escolha pendente
+        aguardandoEscolhaOponente = false;
+        aguardandoEscolhaCarta = false;
+        aguardandoEscolhaTipoCarta = false;
+        idJogadorDoador = -1;
         anunciarTurno(servidor);
     } else if (aguardandoReacao) {
         const bool eraOPrimeiro = !filaRespostaNao.empty() && filaRespostaNao.front() == idJogador;
         filaRespostaNao.erase(std::remove(filaRespostaNao.begin(), filaRespostaNao.end(), idJogador),
                               filaRespostaNao.end());
         if (filaRespostaNao.empty())  resolverEfeitos(servidor);
-        else if (eraOPrimeiro)        perguntarAoPrimeiro(servidor);  // só ao novo primeiro, não a todos
-    } else {
-        // Se estava no meio de um Favor, o autor precisa voltar ao turno normal;
-        // TURNO + mesa também limpam o estado dos clientes.
-        anunciarTurno(servidor);
+        else if (eraOPrimeiro)        perguntarAoPrimeiro(servidor);
+        } else {
+        // Algum oponente do autor ainda tem carta? (mesmo teste do aplicarEfeito)
+        bool alguemTemCarta = false;
+        for (int id : ordemTurnos)
+            if (id != ordemTurnos.front()) {
+                auto o = obterJogadorPorId(id);
+                if (o && o->jogador.getTamanhoMao() > 0) { alguemTemCarta = true; break; }
+            }
+
+        // O alvo que ia entregar a carta desconectou: o efeito continua, o autor escolhe outro alvo
+        if ((aguardandoEscolhaCarta || aguardandoEscolhaTipoCarta) && idJogador == idJogadorDoador) {
+            aguardandoEscolhaCarta = false;
+            aguardandoEscolhaTipoCarta = false;
+            idJogadorDoador = -1;
+            if (alguemTemCarta) {
+                aguardandoEscolhaOponente = true;
+                std::string contexto = "FAVOR";
+                if (tipoDoacao == tipoDoacao::combo3) contexto = "COMBO3";
+                if (auto autor = obterJogadorPorId(ordemTurnos.front()))
+                    enviar(*autor, "ESCOLHER_ALVO " + contexto + "\n");
+                notificarTodosMesa(servidor);
+            } else {  // ninguém sobrou com cartas: não há efeito possível
+                servidor.broadcast("FAVOR_SEM_EFEITO\n");
+                anunciarTurno(servidor);
+            }
+        }
+        // O autor ainda não escolheu o alvo e ninguém sobrou com cartas: encerra em vez de travar
+        else if (aguardandoEscolhaOponente && !alguemTemCarta) {
+            aguardandoEscolhaOponente = false;
+            servidor.broadcast("FAVOR_SEM_EFEITO\n");
+            anunciarTurno(servidor);
+        }
+        // Se outra pessoa desconectou enquanto o alvo/carta estava sendo escolhido, mantemos o estado
+        else if (aguardandoEscolhaOponente || aguardandoEscolhaCarta || aguardandoEscolhaTipoCarta) {
+            notificarTodosMesa(servidor);
+        }
+        else {
+            anunciarTurno(servidor);
+        }
     }
-    aguardandoEscolhaOponente = false;
-    aguardandoEscolhaCarta = false;
-    idJogadorDoador = -1;
 }
 
 bool Partida::verificarFimDeJogo(ServidorTCP& servidor) {
