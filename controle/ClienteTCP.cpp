@@ -114,6 +114,8 @@ ModoJogo ClienteTCP::modoAtual() const {
     std::lock_guard<std::mutex> lock(mtx);
     if (!vivo) return ModoJogo::Eliminado;
     if (aguardandoNao) return ModoJogo::Reagir;
+    if (escolhendoAlvo) return ModoJogo::EscolherAlvo;
+    if (escolhendoDoacao) return ModoJogo::EscolherCarta;
     if (turnoAtual == id && !aguardandoMinhaCarta) return ModoJogo::MinhaVez;
     return ModoJogo::Aguardar;
 }
@@ -172,6 +174,11 @@ std::string traduzirErro(const std::string& codigo) {
     if (codigo == "CARTA_NAO_IMPLEMENTADA")                   return "Essa carta ainda nao foi implementada.";
     if (codigo == "AGUARDANDO_RESPOSTA_NAO")                  return "Aguarde: os outros jogadores estao reagindo.";
     if (codigo == "VOCE_NAO_TEM_A_CARTA_NAO")                 return "Voce nao tem a carta NAO.";
+    if (codigo == "ESCOLHA_OUTRO_JOGADOR")                    return "Escolha outro jogador, nao voce mesmo.";
+    if (codigo == "JOGADOR_SEM_CARTAS")                       return "Esse jogador nao tem cartas. Escolha outro.";
+    if (codigo == "JOGADOR_NAO_ENCONTRADO")                   return "Jogador nao encontrado. Digite o nome exato.";
+    if (codigo == "APENAS_O_AUTOR_PODE_ESCOLHER_O_ALVO")      return "Aguarde: o autor do FAVOR esta escolhendo o alvo.";
+    if (codigo == "AGUARDANDO_DOACAO_DE_CARTA")               return "Aguarde: o jogador esta escolhendo a carta a entregar.";
     if (codigo == "NAO_E_SUA_VEZ_DE_REAGIR")                  return "Nao e a sua vez de reagir.";
     if (codigo == "VOCE_ESTA_ELIMINADO")                      return "Voce foi eliminado.";
     if (codigo == "COMANDO_INVALIDO" || codigo == "COMANDO_INVALIDO_USE_NUMEROS")
@@ -236,9 +243,11 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
         } else if (cmd == "TURNO") {
             int t;
             if (iss >> t) turnoAtual = t;
-            // Um novo turno encerra qualquer reação pendente.
+            // Um novo turno encerra qualquer reação ou escolha de FAVOR pendente.
             aguardandoNao = false;
             aguardandoMinhaCarta = false;
+            escolhendoAlvo = false;
+            escolhendoDoacao = false;
 
         } else if (cmd == "MESA_ESTADO") {
             estadoMesa = linha.size() > 12 ? linha.substr(12) : "";
@@ -267,6 +276,44 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             int autor = -1;
             iss >> autor;
             evento = (autor == id ? std::string("Voce") : nomeDe(autor)) + " jogou NAO!";
+
+        } else if (cmd == "ESCOLHER_ALVO") {
+            // Meu FAVOR passou sem NAO: agora eu digito o nome do oponente.
+            escolhendoAlvo = true;
+            aguardandoMinhaCarta = false;
+            evento = "[FAVOR] Digite o nome do jogador que vai te dar uma carta.";
+
+        } else if (cmd == "FAVOR") {
+            // "FAVOR <autor> <alvo>": o autor escolheu de quem vai pedir.
+            int autor = -1, alvo = -1;
+            iss >> autor >> alvo;
+            if (autor == id) {
+                escolhendoAlvo = false;
+                aguardandoMinhaCarta = true;  // espera o alvo entregar a carta
+            }
+            evento = (autor == id ? std::string("Voce") : nomeDe(autor)) + " pediu uma carta a " +
+                     (alvo == id ? std::string("voce") : nomeDe(alvo)) + ".";
+
+        } else if (cmd == "FAVOR_SEM_EFEITO") {
+            aguardandoMinhaCarta = false;
+            evento = "O FAVOR nao teve efeito: ninguem tem cartas para dar.";
+
+        } else if (cmd == "ESCOLHER_CARTA") {
+            // "ESCOLHER_CARTA <autor>": eu sou o alvo e preciso entregar uma carta.
+            int autor = -1;
+            iss >> autor;
+            escolhendoDoacao = true;
+            evento = "[FAVOR] " + nomeDe(autor) + " pediu uma carta! Digite o numero da carta da sua mao que quer entregar.";
+
+        } else if (cmd == "CARTA_DOADA") {
+            escolhendoDoacao = false;
+            evento = "Voce entregou a carta.";
+
+        } else if (cmd == "RECEBEU") {
+            // "RECEBEU <nome> <carta>"
+            std::string de, carta;
+            iss >> de >> carta;
+            evento = "Voce recebeu " + carta + " de " + de + ".";
 
         } else if (cmd == "CANCELADO") {
             aguardandoNao = false;
@@ -310,6 +357,8 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
                 vivo = false;
                 aguardandoNao = false;
                 aguardandoMinhaCarta = false;
+                escolhendoAlvo = false;
+                escolhendoDoacao = false;
                 evento = "Voce explodiu e foi eliminado!";
             } else {
                 evento = nomeDe(autor) + " explodiu e foi eliminado!";

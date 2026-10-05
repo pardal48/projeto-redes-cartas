@@ -36,6 +36,7 @@ public:
 private:
     using Baralho = std::vector<std::unique_ptr<Carta>>;
     enum class Motivo { Explosao, Desconexao };
+    enum class tipoDoacao { Favor, combo2, combo3, nothing };
 
     // ---- preparação ----
     void montarBaralho();
@@ -55,6 +56,8 @@ private:
     void processarRespostaNao(ClienteConectado& cliente, bool querJogar, ServidorTCP& servidor);
     void resolverEfeitos(ServidorTCP& servidor);
     void aplicarEfeito(TipoCarta tipo, ServidorTCP& servidor);
+    void transferirCarta(int posicaoCarta, std::shared_ptr<ClienteConectado> origem, std::shared_ptr<ClienteConectado> destino);
+    void processarRoubarCarta(std::shared_ptr<ClienteConectado> alvo, ServidorTCP& servidor);
     void descartarEfeitosPendentes();
 
     // ---- eliminação / fim ----
@@ -79,6 +82,11 @@ private:
     std::deque<int> filaRespostaNao;  // quem ainda precisa responder à pergunta do NAO
     int turnosPendentes = 1;          // turnos que o jogador da vez ainda tem que jogar
     int idUltimoAutor = -1;           // autor da carta (ou NAO) que está no topo da pilha de efeitos
+    int idJogadorDoador = -1;
     bool aguardandoReacao = false;
+    bool aguardandoEscolhaOponente = false;  // carta Favor ou combos
+    bool aguardandoEscolhaCarta = false;     // carta Favor
+    enum tipoDoacao tipoDoacao = tipoDoacao::nothing;
+    bool aguardandoEscolhaTipoCarta = false; // combo 3
     bool andamento = false;
 };

@@ -162,6 +162,12 @@ void Interface::imprimirPrompt(ModoJogo modo) {
         case ModoJogo::Eliminado:
             std::cout << "Voce foi eliminado e esta assistindo. (SAIR para sair)\n" << std::flush;
             break;
+        case ModoJogo::EscolherAlvo:
+            std::cout << "Nome do jogador > " << std::flush;
+            break;
+        case ModoJogo::EscolherCarta:
+            std::cout << "Numero da carta a entregar > " << std::flush;
+            break;
         case ModoJogo::Aguardar:
             std::cout << "Aguardando a jogada dos outros jogadores...\n" << std::flush;
             break;

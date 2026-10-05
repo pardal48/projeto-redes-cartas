@@ -1,6 +1,7 @@
 #include "Partida.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 
 #include "ServidorTCP.hpp"
@@ -47,9 +48,14 @@ bool ehCartaDeReacao(TipoCarta t) {
 
 // Cartas com efeito já programado. As demais (Favor, Gatos) são recusadas ao jogar,
 // para não travar o turno de ninguém.
-// TODO: Favor e combinações de gatos entram aqui quando forem implementados.
+// TODO: combinações de gatos entram aqui quando forem implementadas.
 bool efeitoImplementado(TipoCarta t) {
-    return t == TipoCarta::Ataque || t == TipoCarta::Pular || t == TipoCarta::Embaralhar || t == TipoCarta::Futuro;
+    return t == TipoCarta::Ataque || t == TipoCarta::Pular || t == TipoCarta::Embaralhar || t == TipoCarta::Futuro || t == TipoCarta::Favor;
+}
+
+std::string minusculo(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
 }
 
 int indiceDoTipo(const std::vector<std::unique_ptr<Carta>>& mao, TipoCarta tipo) {
@@ -126,12 +132,10 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
     std::string acao;
     iss >> acao;
 
-    // MESA vale para qualquer um (inclusive eliminados): só devolve o estado.
     if (acao == "MESA") {
         enviar(cliente, obterEstadoMesa(cliente));
         return;
     }
-
     if (!andamento) return;
 
     if (!cliente.jogador.estaVivo()) {
@@ -139,14 +143,87 @@ void Partida::processarComando(ClienteConectado& cliente, const std::string& com
         return;
     }
 
-    // Com uma carta na pilha de efeitos, só se aceita resposta ao NAO.
+    // FASE 1: Reação ao NAO (Qualquer um, exceto quem jogou a carta)
     if (aguardandoReacao) {
-        if (acao == "JOGAR_NAO")  processarRespostaNao(cliente, true, servidor);
-        else if (acao == "PASSO") processarRespostaNao(cliente, false, servidor);
-        else                      enviar(cliente, "ERRO AGUARDANDO_RESPOSTA_NAO\n");
+        std::string acaoUpper = acao;
+        std::transform(acaoUpper.begin(), acaoUpper.end(), acaoUpper.begin(), ::toupper);
+
+        if (acaoUpper == "JOGAR_NAO")  processarRespostaNao(cliente, true, servidor);
+        else if (acaoUpper == "PASSO") processarRespostaNao(cliente, false, servidor);
+        else                           enviar(cliente, "ERRO AGUARDANDO_RESPOSTA_NAO\n");
+        return; // Sai imediatamente, não passa pelas validações abaixo
+    }
+
+    // FASE 2: Doador escolhendo a carta para entregar (Apenas o alvo do Favor)
+    if (aguardandoEscolhaCarta) {
+        if (cliente.jogador.getId() != idJogadorDoador) {
+            enviar(cliente, "ERRO AGUARDANDO_DOACAO_DE_CARTA\n");
+            return;
+        }
+
+        int indice;
+        try {
+            indice = std::stoi(acao);
+        } catch (...) {
+            enviar(cliente, "ERRO INDICE_INVALIDO\n");
+            return;
+        }
+
+        if (indice < 0 || indice >= static_cast<int>(cliente.jogador.getTamanhoMao())) {
+            enviar(cliente, "ERRO INDICE_INVALIDO\n");
+            return;
+        }
+
+        auto origem = obterJogadorPorId(cliente.jogador.getId());
+        auto destino = obterJogadorPorId(ordemTurnos.front()); // O autor do turno recebe a carta
+
+        if (origem && destino) {
+            const std::string nomeCarta = origem->jogador.getMao()[static_cast<size_t>(indice)]->getNome();
+            transferirCarta(indice, origem, destino);
+            aguardandoEscolhaCarta = false;
+            idJogadorDoador = -1;
+
+            enviar(cliente, "CARTA_DOADA\n");
+            enviar(*destino, "RECEBEU " + cliente.jogador.getNome() + " " + nomeCarta + "\n");
+            anunciarTurno(servidor); // Retoma o jogo normal
+        }
         return;
     }
 
+    // FASE 3: Autor do Favor escolhendo o oponente alvo
+    if (aguardandoEscolhaOponente) {
+        // VERIFICAÇÃO DO AUTOR: Apenas quem jogou o Favor (o dono do turno) pode escolher o alvo
+        if (cliente.jogador.getId() != ordemTurnos.front()) {
+            enviar(cliente, "ERRO APENAS_O_AUTOR_PODE_ESCOLHER_O_ALVO\n");
+            return;
+        }
+
+        const std::string digitado = minusculo(acao);  // o cliente envia em MAIÚSCULAS
+        for (int id : ordemTurnos) {
+            auto alvo = obterJogadorPorId(id);
+            if (alvo && digitado == minusculo(alvo->jogador.getNome())) {
+                if (alvo->jogador.getId() == cliente.jogador.getId()) {
+                    enviar(cliente, "ERRO ESCOLHA_OUTRO_JOGADOR\n");
+                    return;
+                }
+                if (alvo->jogador.getTamanhoMao() == 0) {
+                    enviar(cliente, "ERRO JOGADOR_SEM_CARTAS\n");
+                    return;
+                }
+                aguardandoEscolhaOponente = false;
+                idJogadorDoador = alvo->jogador.getId();
+                servidor.broadcast("FAVOR " + std::to_string(cliente.jogador.getId()) + " " +
+                                   std::to_string(idJogadorDoador) + "\n");
+                processarRoubarCarta(alvo, servidor);
+                return;
+            }
+        }
+        enviar(cliente, "ERRO JOGADOR_NAO_ENCONTRADO\n");
+        return;
+    }
+
+    // FASE 4: Validação de Turno normal (Comprar ou Jogar carta)
+    // Se o jogo não está esperando Favor ou Reação, valida se é o turno do jogador
     if (ordemTurnos.empty() || ordemTurnos.front() != cliente.jogador.getId()) {
         enviar(cliente, "ERRO NAO_E_SEU_TURNO\n");
         return;
@@ -368,13 +445,66 @@ void Partida::aplicarEfeito(TipoCarta tipo, ServidorTCP& servidor) {
             if (auto autor = obterJogadorPorId(ordemTurnos.front())) enviar(*autor, msg + "\n");
             break;
         }
+        
+        case TipoCarta::Favor: {
+            // Se ninguém tem carta para dar, o Favor não tem efeito (evita travar o autor).
+            bool alguemTemCarta = false;
+            for (int id : ordemTurnos)
+                if (id != ordemTurnos.front()) {
+                    auto o = obterJogadorPorId(id);
+                    if (o && o->jogador.getTamanhoMao() > 0) { alguemTemCarta = true; break; }
+                }
+            if (!alguemTemCarta) {
+                servidor.broadcast("FAVOR_SEM_EFEITO\n");
+                break;  // cai no anunciarTurno() do fim da função
+            }
 
+            aguardandoEscolhaOponente = true;
+            tipoDoacao = tipoDoacao::Favor;
+
+            // O dono do turno é obrigatoriamente o autor da carta original.
+            if (auto autor = obterJogadorPorId(ordemTurnos.front()))
+                enviar(*autor, "ESCOLHER_ALVO\n");
+            return;  // não anuncia o turno: o jogo espera a escolha do alvo e da carta
+        }
         default:
             break;  // não chega aqui: jogarCarta recusa cartas sem efeito implementado
     }
     anunciarTurno(servidor);
 }
+void Partida::transferirCarta(int posicaoCarta, std::shared_ptr<ClienteConectado> origem, std::shared_ptr<ClienteConectado> destino) {
+    auto cartaTransferida = origem->jogador.removerCartaMao(posicaoCarta);
+    destino->jogador.adicionarCartaMao(std::move(cartaTransferida));
+}
 
+void Partida::processarRoubarCarta(std::shared_ptr<ClienteConectado> alvo, ServidorTCP& servidor) {
+    auto autor = obterJogadorPorId(ordemTurnos.front()); // O autor é o dono do turno atual
+    
+    switch (tipoDoacao) {
+        case tipoDoacao::Favor: {
+            aguardandoEscolhaCarta = true;
+            enviar(*alvo, "ESCOLHER_CARTA " + std::to_string(ordemTurnos.front()) + "\n");
+            break;
+        }
+        case tipoDoacao::combo2: {
+            if (alvo->jogador.getTamanhoMao() > 0) {
+                std::uniform_int_distribution<size_t> dist(0, alvo->jogador.getTamanhoMao() - 1);
+                const size_t idx = dist(rng);
+                transferirCarta(idx, alvo, autor);
+            }
+            anunciarTurno(servidor);
+            break;
+        }
+        case tipoDoacao::combo3: {
+            aguardandoEscolhaTipoCarta = true;
+            if (autor) enviar(*autor, "ESCOLHA O TIPO DE CARTA PARA ROUBAR\n");
+            break;
+        }
+        default:
+            break;
+    }
+    tipoDoacao = tipoDoacao::nothing;
+}
 void Partida::descartarEfeitosPendentes() {
     for (auto& c : pilhaEfeitos) pilhaDescarte.push_back(std::move(c));
     pilhaEfeitos.clear();
@@ -425,8 +555,13 @@ void Partida::eliminarJogador(int idJogador, Motivo motivo, ServidorTCP& servido
         if (filaRespostaNao.empty())  resolverEfeitos(servidor);
         else if (eraOPrimeiro)        perguntarAoPrimeiro(servidor);  // só ao novo primeiro, não a todos
     } else {
-        notificarTodosMesa(servidor);  // a lista de oponentes mudou
+        // Se estava no meio de um Favor, o autor precisa voltar ao turno normal;
+        // TURNO + mesa também limpam o estado dos clientes.
+        anunciarTurno(servidor);
     }
+    aguardandoEscolhaOponente = false;
+    aguardandoEscolhaCarta = false;
+    idJogadorDoador = -1;
 }
 
 bool Partida::verificarFimDeJogo(ServidorTCP& servidor) {

@@ -52,7 +52,9 @@ int main(int argc, char** argv) {
         if (!emPartida) return;
         // Após um erro (ou uma pergunta de reação) mostra de novo o que o jogador pode digitar.
         const ModoJogo modo = cliente.modoAtual();
-        if (ehErro || modo == ModoJogo::Reagir) interface.mostrar_prompt(modo);
+        if (ehErro || modo == ModoJogo::Reagir || modo == ModoJogo::EscolherAlvo ||
+            modo == ModoJogo::EscolherCarta)
+            interface.mostrar_prompt(modo);
     };
 
     // ---- conexão ----
@@ -137,6 +139,12 @@ int main(int argc, char** argv) {
                     interface.mostrar_erro("Comando invalido.");
                     interface.mostrar_prompt(modo);
                 }
+                break;
+
+            case ModoJogo::EscolherAlvo:
+            case ModoJogo::EscolherCarta:
+                // Nome do oponente ou número da carta: o servidor valida e responde com erro se preciso.
+                cliente.enviar(comando);
                 break;
 
             case ModoJogo::Aguardar:

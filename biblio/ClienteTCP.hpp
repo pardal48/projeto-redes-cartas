@@ -14,7 +14,9 @@ enum class ModoJogo {
     Aguardar,   // vez de outro jogador
     Reagir,     // alguém jogou uma carta: responder JOGAR_NAO ou PASSO
     MinhaVez,   // posso COMPRAR / JOGAR
-    Eliminado   // explodi: só assisto
+    Eliminado,  // explodi: só assisto
+    EscolherAlvo,   // meu FAVOR passou: digitar o nome de quem vai me dar uma carta
+    EscolherCarta   // alguém me pediu um FAVOR: digitar o número da carta a entregar
 };
 
 // Abre uma conexão TCP; devolve o fd ou -1.
@@ -87,4 +89,6 @@ private:
     int turnoAtual = -1;
     bool aguardandoNao = false;        // o servidor me perguntou se quero jogar NAO
     bool aguardandoMinhaCarta = false; // joguei uma carta e os outros estão reagindo
+    bool escolhendoAlvo = false;       // FAVOR: o servidor espera eu escolher o oponente
+    bool escolhendoDoacao = false;     // FAVOR: o servidor espera eu escolher a carta a entregar
 };
