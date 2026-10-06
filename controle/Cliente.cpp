@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
             case ModoJogo::EscolherAlvo://escolhe alvo de uma carta
             case ModoJogo::EscolherCarta://escolhe a carta para ser entregue, como em favor, ou pra roubar a carta do adversário
             case ModoJogo::EscolherTipoCarta://qual tipo de carta roubar, caso dos maiores combos que permitem escolher 
-                //precisamente a carta que quer
+                
                 cliente.enviar(comando);
                 break;
 
