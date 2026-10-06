@@ -8,18 +8,16 @@
 
 namespace {
 
-ServidorTCP* g_servidor = nullptr;  // acessado pelo signal handler
+ServidorTCP* g_servidor = nullptr;
 
-// Ctrl+C / SIGTERM: só pede para parar; o loop de accept() encerra tudo de forma limpa.
 void tratarSinal(int) {
     if (g_servidor) g_servidor->parar();
 }
 
-}  // namespace
+}
 
-// Uso: ./servidor [porta]   (padrão 5000)
 int main(int argc, char** argv) {
-    const int porta = (argc > 1) ? std::atoi(argv[1]) : 5000;
+    const int porta = (argc > 1) ? std::atoi(argv[1]) : 5000; // Define a porta padrão em 5000 (ou recebe input do usuário)
 
     std::string nomeServidor;
     std::cout << "Digite o nome do servidor: ";
@@ -29,13 +27,12 @@ int main(int argc, char** argv) {
     if (!servidor.ok()) return 1;
     g_servidor = &servidor;
 
-    // sigaction sem SA_RESTART: o poll() é interrompido pelo sinal.
     struct sigaction sa{};
     sa.sa_handler = tratarSinal;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, nullptr);
-    sigaction(SIGTERM, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr); // Código para reagir a comandos do terminal
 
-    servidor.executar();
+    servidor.executar(); // Inicia o servidor para escutar por clientes no socket de escuta na porta definida
     return 0;
 }
