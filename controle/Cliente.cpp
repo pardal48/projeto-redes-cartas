@@ -19,13 +19,15 @@ int main(int argc, char** argv) {
     std::atomic<bool> noLobby{false};
     std::atomic<bool> emPartida{false};
 
-    // ---- desenho com anti-duplicação ----
+    // desenho com anti-duplicação
+    // sem o mutex era frequente a impressão da mesa múltiplas vezes, o que não atrapalhava o funcionamento
+    //mas prejudicava a vizualização do usuário
     // A thread de recepção e a thread principal podem pedir o mesmo desenho ao mesmo tempo.
-    // O mutex + o número de versão garantem que cada versão do estado é impressa UMA vez.
+    // O mutex + o número de versão garantem que cada versão do estado é impressa uma vez.
     std::mutex mtxDesenho;
     unsigned ultimaVersaoLobby = 0, ultimaVersaoMesa = 0;
 
-    auto desenharLobby = [&] {
+    auto desenharLobby = [&] {//desenha o lobby pro usuário
         std::lock_guard<std::mutex> lock(mtxDesenho);
         auto foto = cliente.snapshotLobby();
         if (foto.versao == ultimaVersaoLobby) return;
@@ -33,7 +35,7 @@ int main(int argc, char** argv) {
         interface.mostrar_lobby(foto.jogadores, cliente.meuId());
     };
 
-    auto desenharMesa = [&] {
+    auto desenharMesa = [&] {//desenha a mesa
         std::lock_guard<std::mutex> lock(mtxDesenho);
         auto foto = cliente.snapshotMesa();
         if (foto.versao == ultimaVersaoMesa || foto.texto.empty()) return;
@@ -47,24 +49,25 @@ int main(int argc, char** argv) {
         else if (emPartida) desenharMesa();
     };
 
+    // mostra/pede pra mostra um evento no jogo, que pode ser dois casos, ou erro ou a pergunta pra jogar o não
     cliente.aoEvento = [&](const std::string& texto, bool ehErro) {
         interface.mostrar_evento(texto);
         if (!emPartida) return;
-        // Após um erro (ou uma pergunta de reação) mostra de novo o que o jogador pode digitar.
+        // Após um erro ou uma pergunta de reação mostra de novo o que o jogador pode digitar.
         const ModoJogo modo = cliente.modoAtual();
         if (ehErro || modo == ModoJogo::Reagir || modo == ModoJogo::EscolherAlvo ||
             modo == ModoJogo::EscolherCarta)
             interface.mostrar_prompt(modo);
     };
 
-    // ---- conexão ----
+    // conexão com o servidor
     std::cout << "Conectando ao servidor (" << ip << ":" << porta << ")...\n";
     if (!cliente.conectar(ip, porta)) {
         std::cerr << "Erro: Nao foi possivel conectar ao servidor!\n";
         return 1;
     }
 
-    // ---- nome ----
+    //  digita o nome do usuário no jogo
     std::string nome;
     bool nomeOk = false;
     while (cliente.conectado()) {
@@ -79,35 +82,36 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // ---- lobby ----
+    //lobby
     noLobby = true;
     desenharLobby();
 
     while (cliente.conectado() && !cliente.iniciou()) {
         // timeout de 200 ms: reavalia conectado()/iniciou() mesmo sem o usuário digitar
+        //avalia a condição de todos prontos por exemplo, ou se um usuário cancelou logo após o último ficar pronto
         switch (interface.ler_comando_lobby(200)) {
-            case Interface::ComandoLobby::AlternarPronto:
+            case Interface::ComandoLobby::AlternarPronto://seta se o usuário está pronto ou não
                 cliente.enviar(cliente.estouPronto() ? "ESPERA" : "PRONTO");
                 break;
-            case Interface::ComandoLobby::Sair:
+            case Interface::ComandoLobby::Sair://sai do lobby
                 return 0;
-            case Interface::ComandoLobby::Nenhum:
+            case Interface::ComandoLobby::Nenhum://mantem como está
                 break;
         }
     }
     noLobby = false;
 
-    if (!cliente.iniciou()) {
+    if (!cliente.iniciou()) {//se o cliente falhar em iniciar a partida
         interface.mostrar_conexao_perdida();
         return 1;
     }
 
-    // ---- partida ----
+    // partida 
     interface.mostrar_partida_iniciando();
     emPartida = true;
     desenharMesa();  // a mesa pode já ter chegado antes de emPartida ligar
 
-    while (cliente.conectado() && !cliente.terminou()) {
+    while (cliente.conectado() && !cliente.terminou()) {//enquanto o jogo acontece
         const std::string comando = interface.ler_comando_jogo(200);
         if (comando.empty()) continue;
         if (comando == "SAIR") break;
@@ -119,13 +123,14 @@ int main(int argc, char** argv) {
             cliente.enviar("MESA");
             continue;
         }
-        if (comando == "DESCARTE") {
+        if (comando == "DESCARTE") {//mostra a pilha de descarte para o jogador
             interface.mostrar_descarte(cliente.snapshotMesa().texto);
-            interface.mostrar_prompt(modo);
+            interface.mostrar_prompt(modo);//mostra pro jogador se é hora dele fazer alguma coisa ou se ele ainda
+            //está aguardando outros jogarem, isso previne que ele se perca quanto ao turno e reações enquanto olha o descarte
             continue;
         }
 
-        switch (modo) {
+        switch (modo) {// analisa se o jogador está em modo de reação ou se é o turno dele
             case ModoJogo::Reagir:
                 if (comando == "JOGAR_NAO")  cliente.responderNao(true);
                 else if (comando == "PASSO") cliente.responderNao(false);
@@ -141,23 +146,24 @@ int main(int argc, char** argv) {
                 }
                 break;
 
-            case ModoJogo::EscolherAlvo:
-            case ModoJogo::EscolherCarta:
-            case ModoJogo::EscolherTipoCarta:
+            case ModoJogo::EscolherAlvo://escolhe alvo de uma carta
+            case ModoJogo::EscolherCarta://escolhe a carta para ser entregue, como em favor, ou pra roubar a carta do adversário
+            case ModoJogo::EscolherTipoCarta://qual tipo de carta roubar, caso dos maiores combos que permitem escolher 
+                //precisamente a carta que quer
                 cliente.enviar(comando);
                 break;
 
-            case ModoJogo::Aguardar:
+            case ModoJogo::Aguardar://jogador está esperando outro jogador jogar
                 interface.mostrar_erro("Ainda nao e a sua vez.");
                 break;
 
-            case ModoJogo::Eliminado:
+            case ModoJogo::Eliminado://jogador está eliminado
                 interface.mostrar_erro("Voce foi eliminado. Digite SAIR para sair.");
                 break;
         }
     }
 
-    emPartida = false;
-    if (!cliente.terminou() && !cliente.conectado()) interface.mostrar_conexao_perdida();
+    emPartida = false;//saiu do loop: acabou a partida
+    if (!cliente.terminou() && !cliente.conectado()) interface.mostrar_conexao_perdida();//se for por perda de conexão, avisa
     return 0;
 }

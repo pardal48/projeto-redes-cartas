@@ -8,18 +8,21 @@
 #include <cstdio>
 #include <sstream>
 
-// =====================================================================
-// Conexão
-// =====================================================================
 
-int conectarTCP(const std::string& host, int porta, bool verboso) {
-    addrinfo dicas{};
+// Conexão
+/*ClienteTCP possui uma pequena dificuldade de ajuste. Ele possui duas threads mexendo no mesmo objeto,
+uma de recepção, que armazena o que chega do servidor em variáveis e uma thread principal, que decide o que fazer com
+as variáveis. Logicamente não podemos permitir que ambas as threads acessem a mesma variável ao mesmo tempo, para tal,
+várias funções precisam de mutex para proteger as variáveis, mesmo que a maioria seja do mesmo cliente.
+*/
+int conectarTCP(const std::string& host, int porta, bool verboso) {//conecta com o servidor
+    addrinfo dicas{};//addrinfo aceita "localhost como entrada"
     dicas.ai_family = AF_INET;
     dicas.ai_socktype = SOCK_STREAM;
 
     addrinfo* res = nullptr;
-    int erro = getaddrinfo(host.c_str(), std::to_string(porta).c_str(), &dicas, &res);
-    if (erro != 0) {
+    int erro = getaddrinfo(host.c_str(), std::to_string(porta).c_str(), &dicas, &res);//devolve uma lista de endereços
+    if (erro != 0) {//se não tiver, verboso serve pra imprimir mensagens de erro
         if (verboso) std::fprintf(stderr, "getaddrinfo(%s): %s\n", host.c_str(), gai_strerror(erro));
         return -1;
     }
@@ -29,7 +32,7 @@ int conectarTCP(const std::string& host, int porta, bool verboso) {
     for (addrinfo* a = res; a != nullptr; a = a->ai_next) {
         sock = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
         if (sock < 0) continue;
-        if (connect(sock, a->ai_addr, a->ai_addrlen) == 0) break;
+        if (connect(sock, a->ai_addr, a->ai_addrlen) == 0) break;//tenta o connect
         close(sock);
         sock = -1;
     }
@@ -39,25 +42,25 @@ int conectarTCP(const std::string& host, int porta, bool verboso) {
     return sock;
 }
 
-ClienteTCP::~ClienteTCP() { fechar(); }
+ClienteTCP::~ClienteTCP() { fechar(); }//chama a função de fechar como destrutor
 
-bool ClienteTCP::conectar(const std::string& host, int porta) {
+bool ClienteTCP::conectar(const std::string& host, int porta) {//conecta com o servidor
     fd = conectarTCP(host, porta);
     if (fd < 0) return false;
 
-    {
+    {//protege a variável ativo, que é lida pela thread princialem conectado() e pela thread de recepção em receber()
         std::lock_guard<std::mutex> lock(mtx);
         ativo = true;
     }
     thRecepcao = std::thread(&ClienteTCP::receber, this);
     return true;
 }
-
+//envia uma mensagem para o servidor, padronizada sempre com o mesmo estilo
 bool ClienteTCP::enviar(const std::string& linha) {
-    std::lock_guard<std::mutex> lock(mtxEnvio);
+    std::lock_guard<std::mutex> lock(mtxEnvio);//bloqueia mais de um send simultâneo
     const std::string msg = linha + "\n";
     size_t total = 0;
-    while (total < msg.size()) {
+    while (total < msg.size()) {//garante que toda mensagem será enviada, mesmo de maior que apenas um send()
         ssize_t n = send(fd, msg.data() + total, msg.size() - total, MSG_NOSIGNAL);
         if (n < 0 && errno == EINTR) continue;
         if (n <= 0) return false;
@@ -72,14 +75,11 @@ void ClienteTCP::fechar() {
     if (thRecepcao.joinable()) thRecepcao.join();
     close(fd);
     fd = -1;
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mtx);//protege ativo
     ativo = false;
 }
 
-// =====================================================================
-// Acesso ao estado (sempre sob mtx)
-// =====================================================================
-
+// Acesso ao estado (sempre sob mtx para evitar acessos simultâneos)
 bool ClienteTCP::conectado() const { std::lock_guard<std::mutex> l(mtx); return ativo; }
 bool ClienteTCP::iniciou() const   { std::lock_guard<std::mutex> l(mtx); return comecou; }
 bool ClienteTCP::terminou() const  { std::lock_guard<std::mutex> l(mtx); return fimDeJogo; }
@@ -87,29 +87,30 @@ int ClienteTCP::meuId() const      { std::lock_guard<std::mutex> l(mtx); return 
 
 bool ClienteTCP::esperarNome() {
     std::unique_lock<std::mutex> lock(mtx);
+    //libera o mutex e espera receber o nome, o !ativo impede esperar eternamente se o usuário cair
     cv.wait(lock, [this] { return nomeAceito || erroNome || !ativo; });
     const bool aceito = nomeAceito;
     erroNome = false;  // consome o erro para a próxima tentativa
     return aceito;
 }
 
-bool ClienteTCP::estouPronto() const {
+bool ClienteTCP::estouPronto() const {//avisa se está pronto ou não
     std::lock_guard<std::mutex> lock(mtx);
     for (const auto& j : jogadoresDoLobby)
         if (j->getId() == id) return j->getPronto();
     return false;
 }
 
-ClienteTCP::LobbySnapshot ClienteTCP::snapshotLobby() const {
+ClienteTCP::LobbySnapshot ClienteTCP::snapshotLobby() const {//pega um snapshot do lobby
     std::lock_guard<std::mutex> lock(mtx);
     return {versaoLobby, jogadoresDoLobby};
 }
 
-ClienteTCP::MesaSnapshot ClienteTCP::snapshotMesa() const {
+ClienteTCP::MesaSnapshot ClienteTCP::snapshotMesa() const {//pega snapshot da mesa
     std::lock_guard<std::mutex> lock(mtx);
     return {versaoMesa, estadoMesa};
 }
-
+//determina em qual modo de jogo está baseado em várias flags diferentes
 ModoJogo ClienteTCP::modoAtual() const {
     std::lock_guard<std::mutex> lock(mtx);
     if (!vivo) return ModoJogo::Eliminado;
@@ -120,7 +121,7 @@ ModoJogo ClienteTCP::modoAtual() const {
     if (turnoAtual == id && !aguardandoMinhaCarta) return ModoJogo::MinhaVez;
     return ModoJogo::Aguardar;
 }
-
+//responde se passa ou se joga a carta não em resposta
 void ClienteTCP::responderNao(bool jogarNao) {
     {
         std::lock_guard<std::mutex> lock(mtx);
@@ -129,16 +130,18 @@ void ClienteTCP::responderNao(bool jogarNao) {
     enviar(jogarNao ? "JOGAR_NAO" : "PASSO");
 }
 
-std::string ClienteTCP::nomeDe(int idJogador) const {
+std::string ClienteTCP::nomeDe(int idJogador) const {//pega o nome de um jogador
     for (const auto& j : jogadoresDoLobby)
         if (j->getId() == idJogador) return j->getNome();
     return "Jogador " + std::to_string(idJogador);
 }
 
-// =====================================================================
-// Thread de recepção
-// =====================================================================
 
+// Thread de recepção
+
+/*recebe uma mensagem do servidor, como visto anteriormente em send, o tamanho da mensagem pode ser maior que o que cabe em
+apenas um send() ou recv(), então fazemos um loop para ler tudo
+*/
 void ClienteTCP::receber() {
     std::string entrada;
     char buffer[512];
@@ -150,7 +153,7 @@ void ClienteTCP::receber() {
 
         entrada.append(buffer, static_cast<size_t>(n));
         size_t pos;
-        while ((pos = entrada.find('\n')) != std::string::npos) {
+        while ((pos = entrada.find('\n')) != std::string::npos) {// /n como padrão escolhido sinaliza o fim de um comando
             std::string linha = entrada.substr(0, pos);
             entrada.erase(0, pos + 1);
             if (!linha.empty() && linha.back() == '\r') linha.pop_back();
@@ -229,7 +232,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
                 size_t a = item.find(':'), b = item.rfind(':');
                 if (a == std::string::npos || a == b) continue;  // item mal formado
                 try {
-                    auto j = std::make_shared<Jogador>();
+                    auto j = std::make_shared<Jogador>();//coloca o jogador
                     j->setId(std::stoi(item.substr(0, a)));
                     j->setNome(item.substr(a + 1, b - a - 1));
                     j->setPronto(item.substr(b + 1) == "1");
@@ -242,10 +245,10 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             ++versaoLobby;
             lobbyMudou = true;
 
-        } else if (cmd == "INICIAR") {
+        } else if (cmd == "INICIAR") {//vai iniciar o jogo
             comecou = true;
 
-        } else if (cmd == "TURNO") {
+        } else if (cmd == "TURNO") {//turno de quem
             int t;
             if (iss >> t) {
                 turnoAtual = t;
@@ -262,7 +265,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             ++versaoMesa;
             mesaMudou = true;
 
-        } else if (cmd == "JOGOU") {
+        } else if (cmd == "JOGOU") {//alguém jogou
             int autor = -1;
             std::string carta;
             iss >> autor >> carta;
@@ -273,7 +276,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
                 evento = nomeDe(autor) + " jogou " + carta + ".";
             }
 
-        } else if (cmd == "PERGUNTA_NAO") {
+        } else if (cmd == "PERGUNTA_NAO") {//pergunta se quer jogar a carta não
             int autor = -1;
             std::string carta;
             iss >> autor >> carta;
@@ -285,9 +288,9 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             iss >> autor;
             evento = (autor == id ? std::string("Voce") : nomeDe(autor)) + " jogou NAO!";
 
-        } else if (cmd == "ESCOLHER_ALVO") {
+        } else if (cmd == "ESCOLHER_ALVO") {//escolhe alvo pro efeito
             std::string tipoContexto;
-            iss >> tipoContexto; // Reads FAVOR, COMBO2, COMBO3 (or stays empty safely)
+            iss >> tipoContexto; // lê FAVOR, COMBO2, COMBO3 
             
             escolhendoAlvo = true;
             aguardandoMinhaCarta = false;
@@ -300,6 +303,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
             } else {
                 evento = "[FAVOR] Digite o nome do jogador que vai te dar uma carta.";
             }
+
         } else if (cmd == "FAVOR" || cmd == "COMBO2" || cmd == "COMBO3") {
             
             int autor = -1, alvo = -1;
@@ -398,7 +402,7 @@ void ClienteTCP::tratarLinha(const std::string& linha) {
         // JOGO_INICIADO e comandos desconhecidos: ignorados.
     }
 
-    cv.notify_all();
+    cv.notify_all();//como dito antes, essafunções já chamam um lock, se não tirassemos o lock daqui entrariamos em deadolock
     if (!evento.empty() && aoEvento) aoEvento(evento, ehErro);
     if ((lobbyMudou || mesaMudou) && aoAtualizar) aoAtualizar();
 }
