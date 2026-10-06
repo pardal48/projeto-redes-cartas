@@ -10,6 +10,7 @@
 
 namespace {
 
+// Remove espaços em branco do início e do fim da string
 std::string aparar(const std::string& s) {
     size_t i = 0, f = s.size();
     while (i < f && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
@@ -23,7 +24,7 @@ std::string aparar(const std::string& s) {
 // Entrada
 // =====================================================================
 
-// Lê uma tecla sem esperar Enter nem mostrar eco.
+// Lê uma tecla diretamente do terminal, sem exigir Enter e sem exibir o caractere
 char Interface::lerTecla() {
     termios antigo{};
     tcgetattr(STDIN_FILENO, &antigo);
@@ -35,13 +36,13 @@ char Interface::lerTecla() {
     char c = 0;
     ssize_t n = read(STDIN_FILENO, &c, 1);
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &antigo);  // restaura o terminal
-    return n > 0 ? c : 27;                      // fim da entrada = sair
+    tcsetattr(STDIN_FILENO, TCSANOW, &antigo);  // Restaura as configurações do terminal
+    return n > 0 ? c : 27;                      // Trata fim da entrada como saída
 }
-
-// Devolve uma linha completa do buffer; se não houver, lê do teclado (com timeout opcional).
+// Lê uma linha completa da entrada, permitindo timeout opcional
 Interface::Leitura Interface::lerLinha(std::string& linha, int timeoutMs) {
     while (true) {
+        // Verifica se já existe uma linha completa no buffer
         size_t pos = bufferEntrada.find('\n');
         if (pos != std::string::npos) {
             linha = bufferEntrada.substr(0, pos);
@@ -49,7 +50,8 @@ Interface::Leitura Interface::lerLinha(std::string& linha, int timeoutMs) {
             if (!linha.empty() && linha.back() == '\r') linha.pop_back();
             return Leitura::Linha;
         }
-
+        
+         // Aguarda dados na entrada pelo tempo especificado
         if (timeoutMs >= 0) {
             pollfd p{STDIN_FILENO, POLLIN, 0};
             int r = poll(&p, 1, timeoutMs);
@@ -60,6 +62,7 @@ Interface::Leitura Interface::lerLinha(std::string& linha, int timeoutMs) {
             }
         }
 
+        // Lê novos dados e os adiciona ao buffer
         char tmp[256];
         ssize_t n = read(STDIN_FILENO, tmp, sizeof(tmp));
         if (n < 0 && errno == EINTR) continue;
@@ -72,6 +75,7 @@ Interface::Leitura Interface::lerLinha(std::string& linha, int timeoutMs) {
 // Início e nome
 // =====================================================================
 
+// Exibe a tela inicial e verifica se o usuário deseja continuar
 bool Interface::TelaInicial() {
     std::cout << "=== Bem-vindo ao Jogo de Cartas ===\n"
               << " aperte qualquer tecla para continuar\n"
@@ -84,18 +88,20 @@ bool Interface::TelaInicial() {
     return true;
 }
 
+// Solicita e lê o nome escolhido pelo jogador
 bool Interface::pedir_nome(std::string& nome) {
     {
         std::lock_guard<std::mutex> lock(mtxTela);
         std::cout << "Escolha seu nome (letras e numeros, ate 12): " << std::flush;
     }
-    // Leitura fora do lock: bloqueia esperando o usuário, e a thread de recepção
-    // não pode ficar impedida de imprimir enquanto isso.
+    
+     // A leitura ocorre fora do mutex para não bloquear mensagens recebidas
     if (lerLinha(nome, -1) != Leitura::Linha) return false;
     nome = aparar(nome);
     return true;
 }
 
+// Informa que o nome escolhido não é válido
 void Interface::mostrar_nome_invalido() {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cout << "Nome invalido ou ja em uso. Tente outro.\n";
@@ -105,6 +111,7 @@ void Interface::mostrar_nome_invalido() {
 // Lobby
 // =====================================================================
 
+// Exibe os jogadores presentes no lobby e seus estados
 void Interface::mostrar_lobby(const ClienteTCP::ListaLobby& jogadores, int meuId, int capacidade) {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cout << "\n=== LOBBY (" << jogadores.size() << "/" << capacidade << ") ===\n";
@@ -115,6 +122,7 @@ void Interface::mostrar_lobby(const ClienteTCP::ListaLobby& jogadores, int meuId
     std::cout << "Digite P + Enter para alternar pronto, S + Enter para sair.\n" << std::flush;
 }
 
+// Interpreta o comando digitado pelo jogador no lobby
 Interface::ComandoLobby Interface::ler_comando_lobby(int timeoutMs) {
     std::string linha;
     switch (lerLinha(linha, timeoutMs)) {
@@ -132,13 +140,13 @@ Interface::ComandoLobby Interface::ler_comando_lobby(int timeoutMs) {
 // Partida
 // =====================================================================
 
+// Informa ao jogador que a partida está começando
 void Interface::mostrar_partida_iniciando() {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cout << "\nA partida vai comecar!\n";
 }
 
-// A mesa chega como segmentos separados por '|'. O último é o histórico do descarte,
-// que só aparece com o comando DESCARTE.
+// Divide o estado da mesa em segmentos separados pelo caractere '|'
 std::vector<std::string> Interface::dividirSegmentos(const std::string& estadoMesa) {
     std::vector<std::string> segmentos;
     std::string atual;
@@ -150,6 +158,7 @@ std::vector<std::string> Interface::dividirSegmentos(const std::string& estadoMe
     return segmentos;
 }
 
+// Exibe os comandos disponíveis de acordo com o estado atual do jogador
 void Interface::imprimirPrompt(ModoJogo modo) {
     switch (modo) {
         case ModoJogo::MinhaVez:
@@ -177,6 +186,7 @@ void Interface::imprimirPrompt(ModoJogo modo) {
     }
 }
 
+// Exibe o estado atual da mesa, ocultando o histórico de descarte
 void Interface::mostrar_mesa(const std::string& estadoMesa, ModoJogo modo) {
     std::lock_guard<std::mutex> lock(mtxTela);
     const auto seg = dividirSegmentos(estadoMesa);
@@ -188,22 +198,26 @@ void Interface::mostrar_mesa(const std::string& estadoMesa, ModoJogo modo) {
     imprimirPrompt(modo);
 }
 
+// Exibe o histórico da pilha de descarte
 void Interface::mostrar_descarte(const std::string& estadoMesa) {
     std::lock_guard<std::mutex> lock(mtxTela);
     const auto seg = dividirSegmentos(estadoMesa);
     std::cout << "\n--- PILHA DE DESCARTE ---\n" << (seg.empty() ? "" : seg.back()) << "\n";
 }
 
+// Exibe novamente os comandos disponíveis ao jogador
 void Interface::mostrar_prompt(ModoJogo modo) {
     std::lock_guard<std::mutex> lock(mtxTela);
     imprimirPrompt(modo);
 }
 
+// Exibe mensagens de eventos ocorridos durante a partida
 void Interface::mostrar_evento(const std::string& mensagem) {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cout << "\n>>> " << mensagem << "\n" << std::flush;
 }
 
+// Lê e normaliza um comando digitado durante a partida
 std::string Interface::ler_comando_jogo(int timeoutMs) {
     std::string linha;
     switch (lerLinha(linha, timeoutMs)) {
@@ -212,6 +226,8 @@ std::string Interface::ler_comando_jogo(int timeoutMs) {
         case Leitura::Linha:   break;
     }
     linha = aparar(linha);
+    
+    // Converte o comando para maiúsculas para facilitar sua comparação
     for (auto& c : linha) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     return linha;
 }
@@ -220,11 +236,13 @@ std::string Interface::ler_comando_jogo(int timeoutMs) {
 // Mensagens gerais
 // =====================================================================
 
+// Informa ao usuário que a conexão com o servidor foi encerrada
 void Interface::mostrar_conexao_perdida() {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cout << "\nConexao com o servidor perdida.\n";
 }
 
+// Exibe uma mensagem de erro no fluxo de erro padrão
 void Interface::mostrar_erro(const std::string& mensagem) {
     std::lock_guard<std::mutex> lock(mtxTela);
     std::cerr << mensagem << "\n";
