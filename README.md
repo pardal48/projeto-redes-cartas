@@ -1,6 +1,6 @@
 # Jogo de Cartas em Rede
 
-Adaptação do jogo *Exploding Kittens* — cliente-servidor TCP em C++
+Adaptação do jogo *Exploding Kittens*: cliente-servidor TCP em C++
 
 Jogo multijogador de terminal: um servidor hospeda o lobby e a partida; de 2 a 5 clientes se conectam, escolhem um nome, ficam *prontos* e jogam por turnos. Vence o último jogador que não explodir.
 
